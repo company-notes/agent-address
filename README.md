@@ -171,7 +171,7 @@ and the entire suite. Do not add overlapping tests solely for coverage numbers.
 
 ## Development
 
-Requires Node.js 22 or later.
+Requires Node.js 26 LTS (26.13.0 or newer).
 
 ```bash
 npm ci
@@ -247,3 +247,11 @@ addr_WORK...
 Never put organization tokens into LLM context. Direct REST-based host initialization should persist only the host `addr_...` token, not the organization token. Keep production registration credentials out of source control. Authorization, abuse protection, and account recovery should be reviewed before opening registration to untrusted users.
 
 Agent Address intentionally implements **identity and resolution only**. If the future identity layer uses A2A, DID, or another standard, replace the identity boundary without coupling higher-level messaging or workflow logic to this registry.
+
+## Node.js and dependency security
+
+Use the active Node.js 26 LTS release (`.nvmrc` and `.node-version` select the newest 26.x patch).
+The package's `engines.node` requires at least 26.13.0 and disallows experimental major versions.
+After `npm ci`, run `npm run audit:report` to inspect advisories, or
+`npm run audit:check` to fail on outstanding high/critical vulnerabilities.
+Vulnerabilities in the npm dependency graph are separate from vulnerabilities in the Node runtime.

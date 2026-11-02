@@ -11,7 +11,9 @@
     "db:migrate:local": "wrangler d1 migrations apply agent-address --local",
     "db:migrate:remote": "wrangler d1 migrations apply agent-address --remote",
     "check": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "audit:report": "node scripts/audit-report.mjs",
+    "audit:check": "node scripts/audit-report.mjs --enforce"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.22.0",
@@ -27,5 +29,8 @@
     "@modelcontextprotocol/server": "^2.0.0",
     "agents": "^0.24.0",
     "zod": "^4.6.5"
+  },
+  "engines": {
+    "node": ">=26.13.0 <27"
   }
 }
