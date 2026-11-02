@@ -47,6 +47,7 @@ export class SessionAddressService {
     if (current.slug.toLowerCase() !== slug) {
       throw new APIError(409, 'account_has_organization', `This account belongs to organization ${current.slug}, not ${slug}.`);
     }
+
     return current;
   }
 
@@ -56,6 +57,7 @@ export class SessionAddressService {
     if (existing) {
       return existing;
     }
+
     return (await this.registry.createAddress(org, hostHandle, null, null)).address;
   }
 
@@ -71,6 +73,7 @@ export class SessionAddressService {
     if (hosts.length === 0) {
       throw new APIError(409, 'host_required', 'Which machine is this session on? Provide a host name such as mypc.');
     }
+
     const names = hosts.map((host) => host.handle).join(', ');
     throw new APIError(409, 'host_required', `Which machine is this session on? Choose one of: ${names}.`);
   }
@@ -80,6 +83,7 @@ export class SessionAddressService {
     if (address.orgId !== account.orgId || !address.parentAddressId) {
       throw new APIError(403, 'wrong_address', 'This account does not own that work address.');
     }
+
     return address;
   }
 
@@ -89,6 +93,7 @@ export class SessionAddressService {
     const host = await this.chooseHost(organization, request.host);
     const handle = request.handle ? RequestData.normalizeHandle(request.handle) : SessionAddressService.temporaryHandle();
     const issued = await this.registry.createAddress(organization, handle, request.displayName?.trim() || null, host);
+
     return { organization, host, work: issued.address };
   }
 
@@ -97,6 +102,7 @@ export class SessionAddressService {
     const address = await this.requireWorkAddress(account, addressId);
     const organization = await this.accounts.requireOrganization(account);
     const work = await this.registry.renameAddress(address, RequestData.normalizeHandle(handle));
+
     return { organization, work };
   }
 
@@ -158,6 +164,7 @@ export class SessionAddressService {
     const organization = await this.accounts.requireOrganization(account);
     const host = await this.ensureHost(organization, hostHandle);
     const enrollment = await this.enrollments.create(organization, host.handle);
+
     return { organization, host, ...enrollment };
   }
 }

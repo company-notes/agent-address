@@ -14,6 +14,7 @@ export class AccountAuthenticator {
     if (!match) {
       throw new APIError(401, 'unauthorized', 'Bearer OAuth access token required.');
     }
+
     return match[1].trim();
   }
 
@@ -22,6 +23,7 @@ export class AccountAuthenticator {
     if (!summary) {
       throw new APIError(401, 'invalid_token', 'OAuth access token is invalid, expired or revoked.');
     }
+
     return summary.grant.props.accountId;
   }
 }
@@ -55,6 +57,7 @@ export class AccountController {
       const workAddressId = url.searchParams.get('work_address_id');
       return ResponseData.ok(await this.services.sessions.describe(accountId, workAddressId));
     }
+
     if (method === 'POST' && resource === 'work' && !addressId) {
       return this.claimWork(accountId, request);
     }
@@ -64,9 +67,11 @@ export class AccountController {
     if (method === 'DELETE' && resource === 'work' && addressId) {
       return this.releaseWork(accountId, addressId);
     }
+
     if (method === 'GET' && resource === 'resolve') {
       return this.resolve(accountId, url.searchParams.get('address'));
     }
+
     if (method === 'POST' && resource === 'local-install') {
       return this.createLocalInstall(accountId, request);
     }
@@ -89,11 +94,13 @@ export class AccountController {
   private async renameWork(accountId: string, addressId: string, request: Request): Promise<Response> {
     const handle = RequestData.requiredString(await RequestData.readJSON(request), 'handle', 64);
     const { organization, work } = await this.services.sessions.rename(accountId, addressId, handle);
+
     return ResponseData.ok(RegistryService.publicAddress(organization.slug, work));
   }
 
   private async releaseWork(accountId: string, addressId: string): Promise<Response> {
     const { organization, work } = await this.services.sessions.release(accountId, addressId);
+
     return ResponseData.ok(RegistryService.publicAddress(organization.slug, work));
   }
 
@@ -101,12 +108,14 @@ export class AccountController {
     if (!address) {
       throw new APIError(400, 'invalid_request', 'address query parameter is required.');
     }
+
     return ResponseData.ok(await this.services.sessions.resolve(accountId, address));
   }
 
   private async createLocalInstall(accountId: string, request: Request): Promise<Response> {
     const host = RequestData.requiredString(await RequestData.readJSON(request), 'host', 64);
     const install = await this.services.sessions.createLocalInstall(accountId, host);
+
     return ResponseData.ok({
       host: RegistryService.publicAddress(install.organization.slug, install.host),
       enrollmentCode: install.code,
@@ -116,6 +125,7 @@ export class AccountController {
 
   private async readClaimRequest(request: Request): Promise<ClaimRequest> {
     const data = await RequestData.readJSON(request);
+
     return {
       organization: RequestData.optionalString(data, 'organization', 63) ?? undefined,
       organizationDisplayName: RequestData.optionalString(data, 'organizationDisplayName', 120) ?? undefined,

@@ -20,6 +20,7 @@ export class RegistryController {
     if (!match) {
       throw new APIError(401, 'unauthorized', 'Bearer token required.');
     }
+
     return match[1].trim();
   }
 
@@ -29,6 +30,7 @@ export class RegistryController {
     if (credential.orgId !== organization.id) {
       throw new APIError(403, 'wrong_organization', 'Credential does not belong to this organization.');
     }
+
     return organization;
   }
 
@@ -43,6 +45,7 @@ export class RegistryController {
     const data = await RequestData.readJSON(request);
     const handle = RequestData.normalizeHandle(RequestData.requiredString(data, 'handle', 64));
     const displayName = RequestData.optionalString(data, 'displayName', 120);
+
     return [handle, displayName];
   }
 
@@ -89,6 +92,7 @@ export class RegistryController {
     const organization = await this.authenticateOrganization(request, orgSlug);
     const [handle, displayName] = await this.readHandleAndDisplayName(request);
     const issued = await this.registry.createAddress(organization, handle, displayName, null);
+
     return this.addressCreatedResponse(organization.slug, issued);
   }
 
@@ -99,12 +103,14 @@ export class RegistryController {
     const organization = await this.registry.getOrganizationById(parentAddress.orgId);
     const [handle, displayName] = await this.readHandleAndDisplayName(request);
     const issued = await this.registry.createAddress(organization, handle, displayName, parentAddress);
+
     return this.addressCreatedResponse(organization.slug, issued);
   }
 
   async listAddresses(request: Request, orgSlug: string): Promise<Response> {
     const organization = await this.authenticateOrganization(request, orgSlug);
     const addresses = await this.registry.listAddresses(organization.id);
+
     return ResponseData.ok(addresses.map((address) => RegistryService.publicAddress(organization.slug, address)));
   }
 
@@ -130,6 +136,7 @@ export class RegistryController {
     const newHandle = RequestData.normalizeHandle(RequestData.requiredString(data, 'handle', 64));
     const renamed = await this.registry.renameAddress(address, newHandle);
     const organization = await this.registry.getOrganizationById(renamed.orgId);
+
     return ResponseData.ok(RegistryService.publicAddress(organization.slug, renamed));
   }
 
@@ -150,6 +157,7 @@ export class RegistryController {
   private async revokeAddress(addressId: string): Promise<Response> {
     const revoked = await this.registry.revokeAddressTree(addressId);
     const organization = await this.registry.getOrganizationById(revoked.orgId);
+
     return ResponseData.ok(RegistryService.publicAddress(organization.slug, revoked));
   }
 
@@ -246,6 +254,7 @@ export class APIRouter {
     if (root !== 'v1') {
       throw new APIError(404, 'not_found', 'Endpoint not found.');
     }
+
     if (resource === 'account') {
       return this.accountController.handle(request);
     }

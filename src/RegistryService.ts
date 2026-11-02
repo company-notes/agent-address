@@ -71,7 +71,10 @@ export class RegistryService {
   }
 
   static publicAddress(orgSlug: string, address: AddressRow): JSONRecord {
-    const parentPath = address.path.includes('/') ? address.path.slice(0, address.path.lastIndexOf('/')) : null;
+    const parentPath = address.path.includes('/')
+      ? address.path.slice(0, address.path.lastIndexOf('/'))
+      : null;
+
     return {
       id: address.id,
       kind: address.parentAddressId ? 'work' : 'host',
@@ -111,6 +114,7 @@ export class RegistryService {
     if (expectedKind && credential.kind !== expectedKind) {
       throw new APIError(403, 'wrong_credential_type', `${expectedKind} credential required.`);
     }
+
     return credential;
   }
 
@@ -122,6 +126,7 @@ export class RegistryService {
     if (!organization) {
       throw new APIError(404, 'org_not_found', 'Organization not found.');
     }
+
     return organization;
   }
 
@@ -151,6 +156,7 @@ export class RegistryService {
     if (!address) {
       throw new APIError(404, 'address_not_found', 'Address not found.');
     }
+
     return address;
   }
 
@@ -159,6 +165,7 @@ export class RegistryService {
     if (address.revokedAt) {
       throw new APIError(404, 'address_not_found', 'Address is revoked.');
     }
+
     return address;
   }
 

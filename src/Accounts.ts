@@ -38,6 +38,7 @@ export class PasswordHasher {
       key,
       256,
     );
+
     return this.toHex(new Uint8Array(bits));
   }
 
@@ -51,6 +52,7 @@ export class PasswordHasher {
     for (let index = 0; index < actual.length; index += 1) {
       difference |= actual.charCodeAt(index) ^ expectedHash.charCodeAt(index);
     }
+
     return difference === 0;
   }
 }
@@ -68,6 +70,7 @@ export class AccountService {
     if (value.length > 254 || !this.EMAIL_RE.test(value)) {
       throw new APIError(400, 'invalid_email', 'Enter a valid email address.');
     }
+
     return value;
   }
 
@@ -136,6 +139,7 @@ export class AccountService {
     if (!row || !verified) {
       throw new APIError(401, 'invalid_credentials', 'Email or password is incorrect.');
     }
+
     return AccountService.publicAccount(row);
   }
 
@@ -147,6 +151,7 @@ export class AccountService {
     if (!row) {
       throw new APIError(401, 'invalid_account', 'Account no longer exists.');
     }
+
     return AccountService.publicAccount(row);
   }
 
@@ -163,6 +168,7 @@ export class AccountService {
         'This account has no organization yet. Tell me the organization name to register.',
       );
     }
+
     return organization;
   }
 
@@ -175,6 +181,7 @@ export class AccountService {
     // The organization token is intentionally discarded: the account is the owner's credential.
     const issued = await this.registry.createOrganization(slug, displayName);
     await this.assignOrganization(account.id, issued.organization.id);
+
     return issued.organization;
   }
 
@@ -184,6 +191,7 @@ export class AccountService {
     if (credential.orgId !== organization.id) {
       throw new APIError(403, 'wrong_organization', 'Organization token does not belong to that organization.');
     }
+
     return organization;
   }
 
@@ -195,6 +203,7 @@ export class AccountService {
 
     const organization = await this.verifyOrganizationToken(slug, orgToken);
     await this.assignOrganization(account.id, organization.id);
+
     return organization;
   }
 

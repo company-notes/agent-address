@@ -49,6 +49,7 @@ class AccountAPIClient {
     if (!payload.ok) {
       throw new Error(payload.error?.message ?? 'Account API request failed.');
     }
+
     return payload.data as T;
   }
 }
@@ -95,6 +96,7 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
     if (!addressId) {
       throw new Error('This agent session has no name yet. Call agentAddressClaimWork first.');
     }
+
     return addressId;
   }
 

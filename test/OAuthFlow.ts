@@ -29,6 +29,7 @@ export class OAuthTestFlow {
   static async signUpAndGetToken(): Promise<OAuthTokens & { email: string }> {
     const email = `${TestClient.uniqueName('user')}@example.com`;
     const tokens = await new OAuthTestFlow().authorizeAccount('signup', email, OAuthTestFlow.PASSWORD);
+
     return { ...tokens, email };
   }
 
