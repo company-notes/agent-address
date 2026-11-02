@@ -29,7 +29,9 @@ jobs:
       - name: Run tests
         run: npm test
       - name: Validate deployment script syntax
-        run: node --check scripts/prepare-deploy.mjs
+        run: |
+          node --check scripts/prepare-deploy.mjs
+          node --check scripts/resolve-cloudflare-ids.mjs
 
   deploy:
     name: Deploy to Cloudflare
@@ -68,6 +70,8 @@ jobs:
               exit 1
             fi
           done
+      - name: Resolve Cloudflare resource names
+        run: node scripts/resolve-cloudflare-ids.mjs
       - name: Generate deployment configuration
         run: node scripts/prepare-deploy.mjs
       - name: Apply D1 migrations

@@ -171,15 +171,15 @@ At **Settings → Secrets and variables → Actions**, add:
 | --- | --- | --- |
 | Secret | `CLOUDFLARE_API_TOKEN` | A scoped Cloudflare API token with Workers deploy, D1, KV and route permissions as needed |
 | Secret | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account identifier |
-| Variable | `CLOUDFLARE_D1_DATABASE_ID` | Existing D1 database UUID |
-| Variable | `CLOUDFLARE_OAUTH_KV_ID` | Existing OAuth KV namespace ID |
+| Variable | `CLOUDFLARE_D1_DATABASE_ID` | Existing D1 database UUID or exact database name |
+| Variable | `CLOUDFLARE_OAUTH_KV_ID` | Existing OAuth KV namespace ID or exact namespace title |
 | Variable (optional) | `CLOUDFLARE_D1_DATABASE_NAME` | D1 database name if different from `agent-address` |
 | Variable (optional) | `CLOUDFLARE_WORKER_NAME` | Existing Worker name if different from `agent-address` |
 | Variable (optional) | `CLOUDFLARE_CUSTOM_DOMAIN` | Custom Domain hostname, e.g. `address.company-notes.com` |
 
 If `CLOUDFLARE_CUSTOM_DOMAIN` is unset, the workflow deploys the Worker without configuring a new custom domain. Once you own and manage the relevant zone in Cloudflare, set the variable to `address.company-notes.com` to manage that hostname through Wrangler. Ensure that no conflicting DNS CNAME record exists.
 
-Create or reuse the D1 database and KV namespace **before** setting their IDs. If migrating an existing live installation, reuse its actual Worker/D1/KV resources or plan an explicit data migration. A new database will not contain old accounts, organizations, or sessions.
+Create or reuse the D1 database and KV namespace **before** setting their identifiers. If names are supplied, the workflow resolves them by exact unique match using Cloudflare read permissions; it never creates missing resources. If migrating an existing live installation, reuse its actual Worker/D1/KV resources or plan an explicit data migration. A new database will not contain old accounts, organizations, or sessions.
 
 ### One-time Cloudflare Worker secret
 
