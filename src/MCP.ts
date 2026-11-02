@@ -60,7 +60,7 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
 
   static readonly INSTRUCTIONS =
     'Agent Address gives each agent session a name of the form org/@machine/session, ' +
-    'for example nuwainfo/@mypc/build-release. The user is already signed in. ' +
+    'for example example-org/@mypc/build-release. The user is already signed in. ' +
     'When the user asks to name or "give a name to" this session, call agentAddressClaimWork once. ' +
     'Pass organization only if the user named it and the account has none yet; the account owns at most one ' +
     'organization, so otherwise omit it. Pass host with the machine name the user gave; if the tool asks which ' +
