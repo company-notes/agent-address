@@ -78,6 +78,41 @@ describe('account API (plain HTTP, no MCP)', () => {
     expect(released.body.data.active).toBe(false);
   });
 
+  it('rejects status lookup of work addresses belonging to another organization', async () => {
+    // Regression: a foreign workAddressId must not disclose another organization's work address.
+    const ownerToken = await signedInAccount();
+    const strangerToken = await signedInAccount();
+
+    const owner = await client.call('POST', '/v1/account/work', {
+      token: ownerToken,
+      body: {
+        organization: TestClient.uniqueName('org'),
+        host: 'owner-host',
+        handle: 'private-work',
+      },
+    });
+    expect(owner.status).toBe(201);
+
+    const stranger = await client.call('POST', '/v1/account/work', {
+      token: strangerToken,
+      body: {
+        organization: TestClient.uniqueName('org'),
+        host: 'stranger-host',
+        handle: 'own-work',
+      },
+    });
+    expect(stranger.status).toBe(201);
+
+    const status = await client.call(
+      'GET',
+      `/v1/account/status?work_address_id=${owner.body.data.work.id}`,
+      { token: strangerToken },
+    );
+
+    expect(status.status).toBe(403);
+    expect(status.body.error.code).toBe('wrong_address');
+  });
+
   it('does not let one account touch another account work address', async () => {
     const ownerToken = await signedInAccount();
     const strangerToken = await signedInAccount();
