@@ -29,8 +29,8 @@ paths:
               type: object
               required: [slug, displayName]
               properties:
-                slug: { type: string, example: nuwainfo }
-                displayName: { type: string, example: NuwaInfo }
+                slug: { type: string, example: example-org }
+                displayName: { type: string, example: Example Organization }
       responses:
         '201':
           description: Organization created; orgToken is returned once
