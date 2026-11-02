@@ -121,12 +121,15 @@ export class SessionAddressService {
     }
 
     const hosts = await this.registry.listActiveHosts(organization.id);
-    const work = workAddressId ? await this.registry.getAddressById(workAddressId) : null;
+    const work = workAddressId
+      ? await this.requireWorkAddress(account, workAddressId)
+      : null;
+
     return {
       account: { email: account.email },
       organization: RegistryService.publicOrganization(organization),
       hosts: hosts.map((host) => RegistryService.publicAddress(organization.slug, host)),
-      work: work && !work.revokedAt ? RegistryService.publicAddress(organization.slug, work) : null,
+      work: work ? RegistryService.publicAddress(organization.slug, work) : null,
     };
   }
 
