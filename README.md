@@ -1,160 +1,95 @@
 # Agent Address
 
-Agent Address 是一個刻意很薄的 hierarchical identity registry。
+Agent Address is a deliberately small, hierarchical identity registry for AI agents.
 
-它只回答：
+It answers three questions: **Which addresses exist within an organization? Who does each address represent? Who is authorized to act on its behalf?**
 
-> **這個 org 裡有哪些 address？這個 address 是誰？誰有權代表它？**
+It does **not** implement messaging, tasks, artifacts, workflows, presence, or release orchestration. Those capabilities belong in other services, such as Nuwa Agent Relay.
 
-它不處理 message、task、artifact、workflow、presence 或 release orchestration。
-
-預計使用的正式網域：`https://address.company-notes.com`（尚需另外設定 Cloudflare DNS 與 Worker custom domain）。
-
----
+Planned production URL: `https://address.company-notes.com` (requires a Cloudflare Custom Domain and a successful Worker deployment).
 
 ## Identity model
 
-Agent Address 分成穩定的 host/environment namespace 與具體 work identity 兩層，讓同一台機器上的多個 Claude/Codex 可以同時被精確指定：
+An address has two levels: a stable host/environment namespace and a concrete work identity. Multiple Claude Code or Codex sessions can therefore have separate, unambiguous identities on the same machine.
 
 ```text
 Organization: example-org
-│
 ├── @mypc                         stable host/environment namespace
-│   ├── @mypc/build-release      Codex doing release work
-│   ├── @mypc/debug-payment      Claude debugging payment
-│   └── @mypc/investigate-devpi  another agent/workstream
-│
+│   ├── @mypc/build-release      Codex working on a release
+│   ├── @mypc/debug-payment      Claude debugging payments
+│   └── @mypc/investigate-devpi  another workstream
 ├── @vps1
 │   └── @vps1/test-linux-build
-│
 └── @mac
     └── @mac/sign-release
 ```
 
-Canonical address 包含 org：
+The canonical address includes the organization: `example-org/mypc/build-release`. Within an organization, agents and users commonly use the shorthand `@mypc/build-release`.
 
-```text
-example-org/mypc/build-release
-```
+### Root (host) address
 
-同一 org 內人類/agent 常用 shorthand：
-
-```text
-@mypc/build-release
-```
-
-### Root address
-
-`@mypc` 是穩定的 host/environment namespace，不代表某一個正在工作的 agent，也不應被當成具體 work target。它在機器上保存一個低權限 `addr_...` credential，主要用途是建立自己的 child work addresses。
+`@mypc` identifies a long-lived host or environment. It is not a specific running agent or work target. The host holds a lower-privilege `addr_...` credential whose main purpose is to create child work addresses.
 
 ### Work address
 
-每個 Claude/Codex MCP runtime 可以為自己的當前工作 claim 一個 child address：
+Each Claude Code or Codex MCP runtime can claim a child address, such as `@mypc/build-release`, for its current task. Its work credential is kept in MCP process memory rather than in the host identity file. This allows multiple concurrent and isolated workstreams on one machine.
 
-```text
-@mypc/build-release
-```
-
-work credential 只存在該 MCP process 記憶體，不寫入 host identity file。因此同一台機器可以同時跑很多互不混淆的 agent workstreams。
-
-已 release/revoke 的 work address 不再佔用名稱，因此之後的新 workstream 可以重新使用相同名稱。
-
-Agent 可以：
-
-- 使用使用者指定的 work name；
-- 若使用者沒指定，根據當前工作自己產生簡短 kebab-case 名稱；
-- rename 當前 work address；
-- 工作結束時 release address。
-
----
+After a work address is released or revoked, its name can be reused. Agents can use a user-specified name, generate a short kebab-case name, rename their current work address, and release it at the end of the task.
 
 ## Architecture
 
 ```text
-Claude / Codex process A
-  MCP runtime
-  @mypc/build-release
-          │
-          │ HTTPS
-          ▼
-address.company-notes.com
-          │
-          ▼
-Cloudflare Worker
-          │
-          ▼
-          D1
-
-Claude / Codex process B
-  MCP runtime
-  @mypc/debug-payment
+Claude / Codex session A          Claude / Codex session B
+          |                                  |
+          +-------------- HTTPS -------------+
+                             |
+                 address.company-notes.com
+                             |
+                     Cloudflare Worker
+                             |
+                            D1
 ```
 
-每台機器不需要自己的 DB。host credential（例如 `@mypc`）與 work credential 由呼叫端自行保存；Worker 只認 bearer token，不假設它存在哪個檔案。
+Each machine does not need a local database. Callers are responsible for storing their host credentials; work credentials are managed by the caller's runtime. The Worker only validates bearer tokens and does not assume where they are stored.
 
----
+## REST API quick start
 
-## Cloud API quick start
+JSON field names use camelCase. The examples below assume the intended production Custom Domain is deployed.
 
-### 1. Create organization
-
-Runtime API JSON 使用 camelCase：
+### 1. Create an organization
 
 ```bash
 curl -X POST https://address.company-notes.com/v1/orgs \
-  -H 'X-Registration-Key: ...' \
+  -H 'X-Registration-Key: YOUR_REGISTRATION_KEY' \
   -H 'Content-Type: application/json' \
-  -d '{
-    "slug": "example-org",
-    "displayName": "Example Organization"
-  }'
+  -d '{"slug":"example-org","displayName":"Example Organization"}'
 ```
 
-Response 會回傳一次性的 `orgToken`。
+The response returns a one-time `orgToken`.
 
-### 2. Create stable host address
+### 2. Create a stable host address
 
 ```bash
 curl -X POST https://address.company-notes.com/v1/orgs/example-org/addresses \
   -H 'Authorization: Bearer org_...' \
   -H 'Content-Type: application/json' \
-  -d '{
-    "handle": "mypc",
-    "displayName": "Main development PC"
-  }'
+  -d '{"handle":"mypc","displayName":"Main development PC"}'
 ```
 
-這會建立：
+This creates `@mypc` (canonical: `example-org/mypc`) and returns a one-time host `addressToken`.
 
-```text
-@mypc
-canonical: example-org/mypc
-```
-
-並回傳一次性的 host `addressToken`。
-
-### 3. Create work address under host
-
-Host credential 可以建立 child：
+### 3. Create a child work address
 
 ```bash
 curl -X POST https://address.company-notes.com/v1/addresses/HOST_ADDRESS_ID/children \
   -H 'Authorization: Bearer addr_HOST...' \
   -H 'Content-Type: application/json' \
-  -d '{
-    "handle": "build-release",
-    "displayName": "Build Release 0.18.3"
-  }'
+  -d '{"handle":"build-release","displayName":"Build Release 0.18.3"}'
 ```
 
-得到：
+Result: `@mypc/build-release` (canonical: `example-org/mypc/build-release`).
 
-```text
-@mypc/build-release
-canonical: example-org/mypc/build-release
-```
-
-### 4. Resolve exact address
+### 4. Resolve an exact address
 
 ```bash
 curl https://address.company-notes.com/v1/resolve/example-org/mypc/build-release
@@ -176,56 +111,28 @@ curl -X DELETE https://address.company-notes.com/v1/addresses/WORK_ADDRESS_ID \
   -H 'Authorization: Bearer addr_WORK...'
 ```
 
----
+## Remote MCP
 
-## D1 schema upgrade
-
-已部署 `0001_init.sql` 的環境要再套：
-
-```text
-migrations/0002_hierarchical_addresses.sql
-```
-
-它會：
-
-- 加入 `parent_address_id`
-- 加入 hierarchical `path`
-- 把既有 root address 的 `path` 設成原本 `handle`
-- 將唯一性從 `(org_id, handle)` 改成 `(org_id, path)`
-
-所以不同 host 可以同時有同名 work address：
-
-```text
-@mypc/build
-@vps1/build
-```
-
----
-
-## Remote MCP (`/mcp`)
-
-Worker 同時提供需要 OAuth 的 Streamable HTTP MCP endpoint：
+The Worker exposes an OAuth-protected Streamable HTTP MCP endpoint:
 
 ```text
 https://address.company-notes.com/mcp
 ```
 
-典型流程：
+Typical flow:
 
-1. MCP client 連上 `/mcp`，被導向 `/authorize`：用 email/password 登入或建立帳號（建立帳號需要 registration key；也可貼上既有 org token 來綁定既有 organization）。
-2. 一個 account 對應一個 organization。對 agent 說「my org is example-org, please call this session build-release」會註冊 organization（若 account 還沒有）、建立 machine（例如 `@mypc`）並 claim session address：`example-org/@mypc/build-release`。已有 organization 的 account 不需要再提 org。
-3. 「give this session a name」不指定名稱時會自動配發 `session-xxxxxx`。
-4. `agentAddressInstallLocal` 會建立一次性 enrollment code（15 分鐘、只能用一次）；當本機需要自己的 host credential 時（例如未來的 local companion），呼叫 `POST /v1/enrollments/redeem` 換成 `addr_HOST...` token。
+1. The MCP client connects to `/mcp` and is redirected to `/authorize`. Sign in with email/password or register an account (registration requires the registration key). An existing organization token can be supplied during organization association.
+2. An account belongs to one organization. An agent can be asked to claim a named session, for example `example-org/@mypc/build-release`. If necessary, the server creates the organization and host before claiming the work address.
+3. Unnamed sessions receive a generated name such as `session-xxxxxx`.
+4. `agentAddressInstallLocal` issues a single-use enrollment code valid for 15 minutes. A local companion can redeem it through `POST /v1/enrollments/redeem` to obtain an `addr_HOST...` token.
 
-Tools：`agentAddressGetStatus`、`agentAddressClaimWork`、`agentAddressRenameWork`、`agentAddressReleaseWork`、`agentAddressResolve`、`agentAddressInstallLocal`。
+MCP tools: `agentAddressGetStatus`, `agentAddressClaimWork`, `agentAddressRenameWork`, `agentAddressReleaseWork`, `agentAddressResolve`, and `agentAddressInstallLocal`.
 
-實作：OAuth 由 `@cloudflare/workers-oauth-provider` 處理（KV binding `OAUTH_KV`），每個 MCP session 是一個 Durable Object（`AddressMCP`），session 的名稱記在 DO storage。登入頁沒有 rate limit，密碼以 PBKDF2-SHA256 存放在 D1 `accounts`。每個 tool 只是薄包裝，實際呼叫的是下面的 Account API——MCP 不是另一套實作。
+Implementation: `@cloudflare/workers-oauth-provider` handles OAuth via `OAUTH_KV`. Each MCP session runs in an `AddressMCP` Durable Object with session data in DO storage. Account passwords are stored in D1 using PBKDF2-SHA256. **The current login page has no dedicated rate limiter; do not treat this deployment as hardened for untrusted public signups without adding abuse protection.** MCP tools delegate to the same Account API rather than implementing a separate identity model.
 
----
+## Account API (without MCP)
 
-## Account API（`/v1/account/*`，不需要 MCP）
-
-給其他產品（例如其他 Agent 服務，）直接用 HTTP 呼叫 Agent Address，不必連上我們的 MCP server。認證方式與 `/mcp` 相同：OAuth access token 當 `Authorization: Bearer`。
+Other services can call `/v1/account/*` directly using an OAuth access token in the `Authorization: Bearer` header:
 
 ```text
 GET    /v1/account/status[?work_address_id=...]
@@ -236,71 +143,83 @@ GET    /v1/account/resolve?address=@mypc/build-release
 POST   /v1/account/local-install        {host}
 ```
 
-行為與 `/mcp` 的 tools 完全一致（同一個 `AccountController`）：一個 account 對應一個 organization；`work` 需要指定 `host` 除非帳號只有一台機器；`local-install` 回傳的 `enrollmentCode` 用 `POST /v1/enrollments/redeem` 換成 host credential。完整 schema 見 `docs/openapi.yaml`。
-
----
-
-## Cloudflare configuration
-
-`wrangler.jsonc` contains **placeholder** KV and D1 resource IDs; no live credentials are in source control. Before deployment:
-
-1. Create or select an OAuth KV namespace and a D1 database in the destination Cloudflare account.
-2. Replace the all-zero `OAUTH_KV.id` and `DB.database_id` placeholders with the real IDs.
-3. Store `REGISTRATION_KEY` using `npx wrangler secret put REGISTRATION_KEY`; never commit it.
-4. Apply D1 migrations and deploy the Worker. Configure `address.company-notes.com` as a custom domain after verifying ownership/routing.
-5. For local development, use `.dev.vars` for secrets (ignored by Git).
-
-The previous `releasebot-agent-address` deployment is **not** automatically migrated by this repository; existing Cloudflare resources and data must be migrated or intentionally reused before cutover.
+These endpoints share `AccountController` with MCP. Each account belongs to one organization. A `host` is required when the account has multiple hosts. The `local-install` response's `enrollmentCode` can be exchanged for a host credential at `POST /v1/enrollments/redeem`. The complete API schema is in [docs/openapi.yaml](docs/openapi.yaml).
 
 ## Development
 
-Worker type check：
+Requires Node.js 22 or later.
 
 ```bash
-npm install
+npm ci
 npm run check
-npm test        # vitest in the Workers runtime (REST, OAuth, remote MCP)
-```
-
-D1 local migrations：
-
-```bash
+npm test
 npm run db:migrate:local
+npm run dev
 ```
 
-Deploy：
+`npm test` runs Vitest using the Cloudflare Workers runtime (REST, OAuth, and remote MCP tests). For local secrets, copy `.dev.vars.example` to `.dev.vars`; never commit local secrets.
+
+## Automated deployment (GitHub Actions)
+
+The workflow in [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) runs **type checks and tests on pull requests and pushes**. A push to `main` (or a manual `workflow_dispatch`) proceeds to D1 migrations and Worker deployment **only if the checks pass**. Deployment configuration is prepared at runtime so Cloudflare resource identifiers are not embedded in source control.
+
+### One-time GitHub configuration
+
+At **Settings → Secrets and variables → Actions**, add:
+
+| Type | Name | Purpose |
+| --- | --- | --- |
+| Secret | `CLOUDFLARE_API_TOKEN` | A scoped Cloudflare API token with Workers deploy, D1, KV and route permissions as needed |
+| Secret | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account identifier |
+| Variable | `CLOUDFLARE_D1_DATABASE_ID` | Existing D1 database UUID |
+| Variable | `CLOUDFLARE_OAUTH_KV_ID` | Existing OAuth KV namespace ID |
+| Variable (optional) | `CLOUDFLARE_D1_DATABASE_NAME` | D1 database name if different from `agent-address` |
+| Variable (optional) | `CLOUDFLARE_WORKER_NAME` | Existing Worker name if different from `agent-address` |
+| Variable (optional) | `CLOUDFLARE_CUSTOM_DOMAIN` | Custom Domain hostname, e.g. `address.company-notes.com` |
+
+If `CLOUDFLARE_CUSTOM_DOMAIN` is unset, the workflow deploys the Worker without configuring a new custom domain. Once you own and manage the relevant zone in Cloudflare, set the variable to `address.company-notes.com` to manage that hostname through Wrangler. Ensure that no conflicting DNS CNAME record exists.
+
+Create or reuse the D1 database and KV namespace **before** setting their IDs. If migrating an existing live installation, reuse its actual Worker/D1/KV resources or plan an explicit data migration. A new database will not contain old accounts, organizations, or sessions.
+
+### One-time Cloudflare Worker secret
+
+Set `REGISTRATION_KEY` on the target Worker using Cloudflare's dashboard or `npx wrangler secret put REGISTRATION_KEY --name YOUR_WORKER_NAME`. Keep it out of git and GitHub logs. Do this before enabling account registration.
+
+### Deployment order
+
+1. `npm ci` → `npm run check` → `npm test`.
+2. Verify that required Cloudflare secrets and repository variables exist.
+3. Generate an ignored `.wrangler.deploy.jsonc` with the actual D1/KV IDs, optional Worker name, and optional custom domain.
+4. Apply pending remote D1 migrations using the configured D1 binding.
+5. Deploy the Worker using that same generated Wrangler config.
+
+**D1 migrations affect real remote data.** Review new migration SQL before merging into `main`. Wrangler performs backups during migration application, but you should still keep a recovery plan.
+
+If the GitHub credentials or resource IDs have not been configured, the deployment step fails without attempting a partial deployment. This repository does not itself create Cloudflare resources or upload production secrets.
+
+## Local and manual deployment
+
+The tracked `wrangler.jsonc` intentionally contains placeholder D1 and KV IDs. To deploy manually, create your own environment-specific configuration or set the documented environment variables and run:
 
 ```bash
-npm run db:migrate:remote
-npm run deploy
+node scripts/prepare-deploy.mjs
+npx wrangler d1 migrations apply DB --remote --config .wrangler.deploy.jsonc
+npx wrangler deploy --config .wrangler.deploy.jsonc
 ```
 
-第一次部署會套用 `wrangler.jsonc` 的 `migrations`（建立 `AddressMCP` Durable Object，SQLite-backed）。
+Ensure `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are available to Wrangler. The Worker config also defines a SQLite-backed `AddressMCP` Durable Object.
 
----
-
-## Security model
+## Security and identity boundaries
 
 ```text
 org_...
-  └─ manages root addresses in an organization
-
+  └── administers an organization's root addresses
 addr_HOST...
-  └─ proves ownership of @mypc
-     └─ may create child work addresses
-
+  └── identifies a host and can create its child work addresses
 addr_WORK...
-  └─ proves ownership of @mypc/build-release
-     ├─ may rename itself
-     └─ may revoke itself
+  └── identifies an individual work address; can rename/revoke itself
 ```
 
-Org token 不應放入 LLM context。任何直接呼叫 REST API 的 host-setup 流程只應持久化 host `addr_...` token，不持久化 org token。
+Never put organization tokens into LLM context. Direct REST-based host initialization should persist only the host `addr_...` token, not the organization token. Keep production registration credentials out of source control. Authorization, abuse protection, and account recovery should be reviewed before opening registration to untrusted users.
 
----
-
-## Design boundary
-
-Agent Address 刻意只做 identity/resolution。
-
-未來即使改用 A2A、DID 或其他 agent identity standard，也應只替換這層，不讓 上層 Agent 協作邏輯 綁死在目前 registry 實作。
+Agent Address intentionally implements **identity and resolution only**. If the future identity layer uses A2A, DID, or another standard, replace the identity boundary without coupling higher-level messaging or workflow logic to this registry.
