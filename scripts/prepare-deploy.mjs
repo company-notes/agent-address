@@ -10,6 +10,7 @@ const required = (name, expression, message) => {
   if (!expression.test(value)) {
     throw new Error(name + ': ' + message);
   }
+
   return value;
 };
 
@@ -29,13 +30,19 @@ database.database_id = d1Id;
 
 const databaseName = (process.env.CLOUDFLARE_D1_DATABASE_NAME || '').trim();
 if (databaseName) {
-  if (!/^[a-z0-9_-]{1,64}$/i.test(databaseName)) throw new Error('Invalid CLOUDFLARE_D1_DATABASE_NAME');
+  if (!/^[a-z0-9_-]{1,64}$/i.test(databaseName)) {
+    throw new Error('Invalid CLOUDFLARE_D1_DATABASE_NAME');
+  }
+
   database.database_name = databaseName;
 }
 
 const workerName = (process.env.CLOUDFLARE_WORKER_NAME || '').trim();
 if (workerName) {
-  if (!/^[a-z0-9_-]{1,63}$/i.test(workerName)) throw new Error('Invalid CLOUDFLARE_WORKER_NAME');
+  if (!/^[a-z0-9_-]{1,63}$/i.test(workerName)) {
+    throw new Error('Invalid CLOUDFLARE_WORKER_NAME');
+  }
+
   config.name = workerName;
 }
 
@@ -44,6 +51,7 @@ if (domain) {
   if (domain.length > 253 || !/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(domain)) {
     throw new Error('CLOUDFLARE_CUSTOM_DOMAIN must be a hostname (without https:// or a path)');
   }
+
   config.routes = [{ pattern: domain, custom_domain: true }];
 }
 

@@ -145,6 +145,30 @@ POST   /v1/account/local-install        {host}
 
 These endpoints share `AccountController` with MCP. Each account belongs to one organization. A `host` is required when the account has multiple hosts. The `local-install` response's `enrollmentCode` can be exchanged for a host credential at `POST /v1/enrollments/redeem`. The complete API schema is in [docs/openapi.yaml](docs/openapi.yaml).
 
+## Testing
+
+The test suite follows the project-appropriate parts of the team Testing Guide:
+one focused core flow, genuine Cloudflare Workers runtime and D1 integration,
+and targeted tests for permission boundaries and error paths. Test helpers
+are shared in `test/Helpers.ts` and `test/OAuthFlow.ts`. There are no mocked
+internal API or database calls in the core flow.
+
+```bash
+npm ci
+npx vitest run test/CoreFlow.test.ts  # focused API + real D1 lifecycle
+npm test                              # all unit and integration tests
+npm run check                         # TypeScript typecheck
+```
+
+The OAuth, registry REST API and remote MCP suites exercise real Worker endpoints
+through the Cloudflare test runtime. The authorization page is tested through HTTP;
+a real-browser UI acceptance test and production-system smoke test are not included.
+CI does not write to the production D1 database during tests.
+
+When fixing a reproduced bug, add a regression test first, confirm it fails for
+the expected assertion, apply the smallest fix, then run the focused test
+and the entire suite. Do not add overlapping tests solely for coverage numbers.
+
 ## Development
 
 Requires Node.js 22 or later.

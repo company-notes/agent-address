@@ -93,6 +93,14 @@ describe('account API (plain HTTP, no MCP)', () => {
     });
     expect(owner.status).toBe(201);
 
+    const ownerStatus = await client.call(
+      'GET',
+      `/v1/account/status?work_address_id=${owner.body.data.work.id}`,
+      { token: ownerToken },
+    );
+    expect(ownerStatus.status, 'An owner must be able to read its own active work').toBe(200);
+    expect(ownerStatus.body.data.work.id).toBe(owner.body.data.work.id);
+
     const stranger = await client.call('POST', '/v1/account/work', {
       token: strangerToken,
       body: {
@@ -109,7 +117,7 @@ describe('account API (plain HTTP, no MCP)', () => {
       { token: strangerToken },
     );
 
-    expect(status.status).toBe(403);
+    expect(status.status, 'An unrelated organization must not read the work address').toBe(403);
     expect(status.body.error.code).toBe('wrong_address');
   });
 
