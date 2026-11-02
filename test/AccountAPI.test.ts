@@ -4,7 +4,7 @@ import { TestClient } from './Helpers';
 import { OAuthTestFlow } from './OAuthFlow';
 
 // Exercises the account-scoped Address API purely over HTTP with an OAuth bearer token, the way a
-// separate product (such as a separate agent messaging service) is meant to call Agent Address directly,
+// separate product (such as an agent messaging service) calls Agent Address directly.
 describe('account API (plain HTTP, no MCP)', () => {
   const client = new TestClient();
 
@@ -76,6 +76,49 @@ describe('account API (plain HTTP, no MCP)', () => {
     const released = await client.call('DELETE', `/v1/account/work/${workId}`, { token });
     expect(released.status).toBe(200);
     expect(released.body.data.active).toBe(false);
+  });
+
+  it('rejects status lookup of work addresses belonging to another organization', async () => {
+    // Regression: a foreign workAddressId must not disclose another organization's work address.
+    const ownerToken = await signedInAccount();
+    const strangerToken = await signedInAccount();
+
+    const owner = await client.call('POST', '/v1/account/work', {
+      token: ownerToken,
+      body: {
+        organization: TestClient.uniqueName('org'),
+        host: 'owner-host',
+        handle: 'private-work',
+      },
+    });
+    expect(owner.status).toBe(201);
+
+    const ownerStatus = await client.call(
+      'GET',
+      `/v1/account/status?work_address_id=${owner.body.data.work.id}`,
+      { token: ownerToken },
+    );
+    expect(ownerStatus.status, 'An owner must be able to read its own active work').toBe(200);
+    expect(ownerStatus.body.data.work.id).toBe(owner.body.data.work.id);
+
+    const stranger = await client.call('POST', '/v1/account/work', {
+      token: strangerToken,
+      body: {
+        organization: TestClient.uniqueName('org'),
+        host: 'stranger-host',
+        handle: 'own-work',
+      },
+    });
+    expect(stranger.status).toBe(201);
+
+    const status = await client.call(
+      'GET',
+      `/v1/account/status?work_address_id=${owner.body.data.work.id}`,
+      { token: strangerToken },
+    );
+
+    expect(status.status, 'An unrelated organization must not read the work address').toBe(403);
+    expect(status.body.error.code).toBe('wrong_address');
   });
 
   it('does not let one account touch another account work address', async () => {

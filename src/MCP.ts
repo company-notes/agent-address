@@ -49,6 +49,7 @@ class AccountAPIClient {
     if (!payload.ok) {
       throw new Error(payload.error?.message ?? 'Account API request failed.');
     }
+
     return payload.data as T;
   }
 }
@@ -95,6 +96,7 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
     if (!addressId) {
       throw new Error('This agent session has no name yet. Call agentAddressClaimWork first.');
     }
+
     return addressId;
   }
 
@@ -187,8 +189,14 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
         description: 'Resolve @machine/session in your organization, or an explicit org/machine/session address.',
         inputSchema: { address: z.string() },
       },
-      async ({ address }) =>
-        AddressMCP.textResult(await this.accountAPI.call('GET', `/v1/account/resolve?address=${encodeURIComponent(address)}`)),
+      async ({ address }) => {
+        const resolved = await this.accountAPI.call(
+          'GET',
+          `/v1/account/resolve?address=${encodeURIComponent(address)}`,
+        );
+
+        return AddressMCP.textResult(resolved);
+      },
     );
   }
 

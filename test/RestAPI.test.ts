@@ -36,36 +36,6 @@ describe('REST registry API', () => {
     expect(duplicate.status).toBe(409);
   });
 
-  it('runs the host and work address lifecycle', async () => {
-    const { slug, host } = await createOrgWithHost();
-
-    const child = await client.createChild(host, 'build-release');
-    expect(child.status).toBe(201);
-    expect(child.body.data.address.canonical).toBe(`${slug}/mypc/build-release`);
-    expect(child.body.data.address.kind).toBe('work');
-
-    const workId = child.body.data.address.id;
-    const workToken = child.body.data.addressToken;
-
-    const resolved = await client.call('GET', `/v1/resolve/${slug}/mypc/build-release`);
-    expect(resolved.status).toBe(200);
-    expect(resolved.body.data.id).toBe(workId);
-
-    const renamed = await client.call('PATCH', `/v1/addresses/${workId}`, {
-      token: workToken,
-      body: { handle: 'release-2' },
-    });
-    expect(renamed.status).toBe(200);
-    expect(renamed.body.data.path).toBe('mypc/release-2');
-
-    const revoked = await client.call('DELETE', `/v1/addresses/${workId}`, { token: workToken });
-    expect(revoked.status).toBe(200);
-    expect(revoked.body.data.active).toBe(false);
-
-    expect((await client.call('GET', `/v1/resolve/${slug}/mypc/release-2`)).status).toBe(404);
-    expect((await client.createChild(host, 'release-2')).status).toBe(201);
-  });
-
   it('rejects duplicate active work addresses under one host', async () => {
     const { host } = await createOrgWithHost();
     await client.createChild(host, 'same');

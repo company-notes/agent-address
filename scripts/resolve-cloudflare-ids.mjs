@@ -14,29 +14,37 @@ if (!accountId || !apiToken || !d1Value || !kvValue || !envFile) {
 
 async function resolve(kind, name, endpoint, field, idField, perPage) {
   const params = new URLSearchParams({ per_page: String(perPage), page: '1' });
-  if (kind === 'D1 database') params.set('name', name);
+  if (kind === 'D1 database') {
+    params.set('name', name);
+  }
+
   const url = 'https://api.cloudflare.com/client/v4/accounts/' +
     encodeURIComponent(accountId) + endpoint + '?' + params.toString();
   const response = await fetch(url, {
     headers: { authorization: 'Bearer ' + apiToken, accept: 'application/json' },
   });
+
   if (!response.ok) {
     throw new Error('Cloudflare ' + kind + ' lookup HTTP ' + response.status +
       ': ensure the API token has D1 Read and Workers KV Storage Read permissions');
   }
   const body = await response.json();
+
   if (!body.success || !Array.isArray(body.result)) {
     throw new Error('Cloudflare ' + kind + ' lookup failed: check the API token permissions');
   }
   if (body.result_info?.total_count > body.result.length) {
     throw new Error('Cloudflare ' + kind + ' lookup is paginated: configure the resource ID instead');
   }
+
   const matches = body.result.filter((item) => item[field] === name);
   if (matches.length !== 1 || typeof matches[0][idField] !== 'string') {
     throw new Error('Expected exactly one ' + kind + ' named "' + name +
       '"; found ' + matches.length + '. Enter its actual ID in GitHub Variables.');
   }
+
   console.log('Resolved ' + kind + ' by unique exact name: ' + name);
+
   return matches[0][idField];
 }
 
@@ -54,5 +62,8 @@ if (!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(d1Value)) {
   }
   overrides.push('CLOUDFLARE_D1_DATABASE_NAME=' + d1Value);
 }
-if (overrides.length) await appendFile(envFile, overrides.join('\n') + '\n');
+if (overrides.length) {
+  await appendFile(envFile, overrides.join('\n') + '\n');
+}
+
 console.log('Cloudflare D1 and KV identifiers are ready.');

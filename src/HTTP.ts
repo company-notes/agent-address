@@ -33,6 +33,7 @@ export class RequestData {
     if (!data || typeof data !== 'object' || Array.isArray(data)) {
       throw new APIError(400, 'invalid_json', 'Request body must be a JSON object.');
     }
+
     return data as JSONRecord;
   }
 
@@ -46,6 +47,7 @@ export class RequestData {
     if (result.length > maxLength) {
       throw new APIError(400, 'invalid_request', `${key} is too long.`);
     }
+
     return result;
   }
 
@@ -62,6 +64,7 @@ export class RequestData {
     if (result.length > maxLength) {
       throw new APIError(400, 'invalid_request', `${key} is too long.`);
     }
+
     return result || null;
   }
 
@@ -74,6 +77,7 @@ export class RequestData {
         'Org slug must be 1-63 lowercase letters, numbers, or hyphens, and cannot start/end with a hyphen.',
       );
     }
+
     return slug;
   }
 
@@ -86,6 +90,7 @@ export class RequestData {
         'Address handle must be 1-63 lowercase letters, numbers, hyphens, or underscores.',
       );
     }
+
     return handle;
   }
 
@@ -96,6 +101,7 @@ export class RequestData {
     }
 
     const segments = rawPath.split('/').map((segment) => this.normalizeHandle(segment));
+
     return segments.join('/');
   }
 }

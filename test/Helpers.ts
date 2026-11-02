@@ -12,6 +12,7 @@ export class TestClient {
 
   static uniqueName(prefix: string): string {
     TestClient.uniqueCounter += 1;
+
     return `${prefix}${Date.now().toString(36)}${TestClient.uniqueCounter}`;
   }
 

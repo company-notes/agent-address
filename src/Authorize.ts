@@ -52,6 +52,7 @@ class AuthorizePage {
 
   private hiddenFields(intent: string): string {
     const encoded = AuthorizePage.escape(JSON.stringify(this.oauthRequest));
+
     return `<input type="hidden" name="oauthRequest" value="${encoded}"><input type="hidden" name="intent" value="${intent}">`;
   }
 
@@ -73,6 +74,7 @@ class AuthorizePage {
       ? `<label for="su-key">Registration key</label>
          <input id="su-key" name="registrationKey" type="password" autocomplete="off" required>`
       : '';
+
     return `<form method="post" action="/authorize">
       <h2>Create an account</h2>${this.hiddenFields('signup')}
       <label for="su-email">Email</label>
@@ -103,6 +105,7 @@ class AuthorizePage {
   <p class="lead">Sign in to let this MCP client name your agent sessions.</p>
   ${error}${this.signInForm(values)}${this.signUpForm(values)}
 </main></body></html>`;
+
     return new Response(html, { status: values.error ? 400 : 200, headers: AuthorizePage.HEADERS });
   }
 }
@@ -119,6 +122,7 @@ export class AuthorizeController {
 
   private static field(form: FormData, name: string): string {
     const value = form.get(name);
+
     return typeof value === 'string' ? value : '';
   }
 
@@ -137,6 +141,7 @@ export class AuthorizeController {
   private async authenticate(form: FormData, intent: string): Promise<AccountRow> {
     const email = AuthorizeController.field(form, 'email');
     const password = AuthorizeController.field(form, 'password');
+
     if (intent === 'signin') {
       return this.services.accounts.logIn(email, password);
     }
@@ -146,6 +151,7 @@ export class AuthorizeController {
     const linkedOrganization = linkSlug
       ? await this.services.accounts.verifyOrganizationToken(linkSlug, AuthorizeController.field(form, 'linkToken').trim())
       : null;
+
     return this.services.accounts.signUp(email, password, registrationKey, linkedOrganization);
   }
 
@@ -185,6 +191,7 @@ export class AuthorizeController {
       scope: oauthRequest.scope,
       props,
     });
+
     return Response.redirect(redirectTo, 302);
   }
 

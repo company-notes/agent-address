@@ -24,6 +24,7 @@ class PublicRoutes {
 
     const response = await new APIRouter(env).handle(request);
     response.headers.set('access-control-allow-origin', '*');
+
     return response;
   }
 

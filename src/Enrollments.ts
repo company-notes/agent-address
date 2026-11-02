@@ -46,6 +46,7 @@ export class EnrollmentService {
         new Date(now).toISOString(),
       )
       .run();
+
     return { code, expiresAt };
   }
 
@@ -78,6 +79,7 @@ export class EnrollmentService {
     }
 
     const issued = await this.registry.createAddress(organization, enrollment.hostHandle, null, null);
+
     return { organization, address: issued.address, token: issued.token };
   }
 }
