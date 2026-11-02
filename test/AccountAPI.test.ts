@@ -4,7 +4,7 @@ import { TestClient } from './Helpers';
 import { OAuthTestFlow } from './OAuthFlow';
 
 // Exercises the account-scoped Address API purely over HTTP with an OAuth bearer token, the way a
-// separate product (such as a separate agent messaging service) is meant to call Agent Address directly,
+// separate product (such as an agent messaging service) calls Agent Address directly.
 describe('account API (plain HTTP, no MCP)', () => {
   const client = new TestClient();
 

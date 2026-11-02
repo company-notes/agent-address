@@ -251,6 +251,7 @@ export class APIRouter {
         canonicalHost: url.host,
       });
     }
+
     if (root !== 'v1') {
       throw new APIError(404, 'not_found', 'Endpoint not found.');
     }
@@ -266,6 +267,7 @@ export class APIRouter {
     if (method === 'GET' && count === 3 && resource === 'orgs') {
       return this.controller.getOrganization(id);
     }
+
     if (method === 'POST' && count === 4 && resource === 'orgs' && sub === 'addresses') {
       return this.controller.createRootAddress(request, id);
     }
@@ -281,6 +283,7 @@ export class APIRouter {
     if (method === 'POST' && count === 4 && resource === 'orgs' && sub === 'rotate-token') {
       return this.controller.rotateOrgToken(request, id);
     }
+
     if (method === 'POST' && count === 4 && resource === 'addresses' && sub === 'children') {
       return this.controller.createChildAddress(request, id);
     }
@@ -290,9 +293,11 @@ export class APIRouter {
     if (method === 'DELETE' && count === 3 && resource === 'addresses') {
       return this.controller.revokeOwnedAddress(request, id);
     }
+
     if (method === 'POST' && count === 3 && resource === 'enrollments' && id === 'redeem') {
       return this.controller.redeemEnrollment(request);
     }
+
     if (method === 'GET' && count >= 4 && resource === 'resolve') {
       return this.controller.resolveAddress(id, parts.slice(3).join('/'));
     }

@@ -189,8 +189,14 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
         description: 'Resolve @machine/session in your organization, or an explicit org/machine/session address.',
         inputSchema: { address: z.string() },
       },
-      async ({ address }) =>
-        AddressMCP.textResult(await this.accountAPI.call('GET', `/v1/account/resolve?address=${encodeURIComponent(address)}`)),
+      async ({ address }) => {
+        const resolved = await this.accountAPI.call(
+          'GET',
+          `/v1/account/resolve?address=${encodeURIComponent(address)}`,
+        );
+
+        return AddressMCP.textResult(resolved);
+      },
     );
   }
 
