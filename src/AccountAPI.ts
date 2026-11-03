@@ -68,6 +68,13 @@ export class AccountController {
       return this.releaseWork(accountId, addressId);
     }
 
+    if (method === 'DELETE' && resource === 'host' && addressId) {
+      const runId = url.searchParams.get('run_id') || '';
+      const result = await this.services.sessions.releaseSmokeHost(accountId, addressId, runId);
+
+      return ResponseData.ok(RegistryService.publicAddress(result.organization.slug, result.host));
+    }
+
     if (method === 'GET' && resource === 'resolve') {
       return this.resolve(accountId, url.searchParams.get('address'));
     }

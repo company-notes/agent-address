@@ -113,6 +113,29 @@ export class SessionAddressService {
     return { organization, work: await this.registry.revokeAddressTree(address.id) };
   }
 
+  async releaseSmokeHost(
+    accountId: string,
+    hostId: string,
+    runId: string,
+  ): Promise<{ organization: OrganizationRow; host: AddressRow }> {
+    const account = await this.accounts.getAccount(accountId);
+    const organization = await this.accounts.requireOrganization(account);
+    const host = await this.registry.getActiveAddressById(hostId);
+    const prefix = 'relay-smoke-' + runId + '-';
+    const safeRun = /^[a-f0-9]{10}$/.test(runId);
+    const safeHost = host.path === prefix + 'a' || host.path === prefix + 'b';
+
+    if (!safeRun || !safeHost ||
+      host.orgId !== organization.id || host.parentAddressId !== null) {
+      throw new APIError(403, 'smoke_host_cleanup_forbidden',
+        'Only a matching empty smoke Host can be revoked by its account owner.');
+    }
+
+    const revoked = await this.registry.revokeEmptySmokeHost(host);
+
+    return { organization, host: revoked };
+  }
+
   async describe(accountId: string, workAddressId: string | null): Promise<JSONRecord> {
     const account = await this.accounts.getAccount(accountId);
     const organization = await this.accounts.findOrganization(account);
