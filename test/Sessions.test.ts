@@ -154,6 +154,53 @@ describe('session addresses', () => {
     await expectAPIError(services.sessions.rename(owner.id, claimed.work.id, 'again'), 'address_not_found');
   });
 
+  it('only revokes an empty, exactly matching smoke-run Host', async () => {
+    const account = await accountWithOrganization();
+    const other = await accountWithOrganization();
+    const runId = '0123456789';
+    const name = 'relay-smoke-' + runId + '-a';
+    const claimed = await services.sessions.claim(account.id, {
+      organization: TestClient.uniqueName('org'),
+      host: name,
+      handle: name,
+    });
+
+    await expectAPIError(
+      services.sessions.releaseSmokeHost(account.id, claimed.host.id, runId),
+      'smoke_host_not_empty',
+    );
+    await expectAPIError(
+      services.sessions.releaseSmokeHost(other.id, claimed.host.id, runId),
+      'no_organization',
+    );
+    await expectAPIError(
+      services.sessions.releaseSmokeHost(account.id, claimed.host.id, 'ffffffffff'),
+      'smoke_host_cleanup_forbidden',
+    );
+
+    await services.sessions.release(account.id, claimed.work.id);
+    const released = await services.sessions.releaseSmokeHost(account.id, claimed.host.id, runId);
+    expect(released.host.revokedAt).not.toBeNull();
+
+    const status = await services.sessions.describe(account.id, null);
+    expect((status.hosts as unknown[]).some((item: any) => item.id === claimed.host.id)).toBe(false);
+  });
+
+  it('does not delete ordinary production Hosts even when they are empty', async () => {
+    const account = await accountWithOrganization();
+    const claimed = await services.sessions.claim(account.id, {
+      organization: TestClient.uniqueName('org'),
+      host: 'real-host',
+      handle: 'job',
+    });
+    await services.sessions.release(account.id, claimed.work.id);
+
+    await expectAPIError(
+      services.sessions.releaseSmokeHost(account.id, claimed.host.id, '0123456789'),
+      'smoke_host_cleanup_forbidden',
+    );
+  });
+
   it('resolves addresses relative to the account organization', async () => {
     const account = await accountWithOrganization();
     const slug = TestClient.uniqueName('org');

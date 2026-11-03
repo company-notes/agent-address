@@ -113,6 +113,81 @@ export class SessionAddressService {
     return { organization, work: await this.registry.revokeAddressTree(address.id) };
   }
 
+  async releaseSmokeHost(
+    accountId: string, hostId: string, runId: string,
+  ): Promise<{ organization: OrganizationRow; host: AddressRow }> {
+    const account = await this.accounts.getAccount(accountId);
+    const organization = await this.accounts.requireOrganization(account);
+    const host = await this.registry.getActiveAddressById(hostId);
+
+    if (!/^[a-f0-9]{10}$/.test(runId) ||
+        host.orgId !== organization.id ||
+        host.parentAddressId !== null ||
+        !new RegExp('^relay-smoke-' + runId + '-[ab]
+    const account = await this.accounts.getAccount(accountId);
+    const organization = await this.accounts.findOrganization(account);
+    if (!organization) {
+      return {
+        account: { email: account.email },
+        organization: null,
+        hosts: [],
+        work: null,
+        nextAction: 'Ask the user for an organization name, then call agentAddressClaimWork with organization set.',
+      };
+    }
+
+    const hosts = await this.registry.listActiveHosts(organization.id);
+    const work = workAddressId
+      ? await this.requireWorkAddress(account, workAddressId)
+      : null;
+
+    return {
+      account: { email: account.email },
+      organization: RegistryService.publicOrganization(organization),
+      hosts: hosts.map((host) => RegistryService.publicAddress(organization.slug, host)),
+      work: work ? RegistryService.publicAddress(organization.slug, work) : null,
+    };
+  }
+
+  async resolve(accountId: string, address: string): Promise<JSONRecord> {
+    const account = await this.accounts.getAccount(accountId);
+    const ownOrganization = await this.accounts.findOrganization(account);
+
+    const value = address.trim();
+    const [orgSlug, path] = value.startsWith('@')
+      ? [ownOrganization?.slug, value.slice(1)]
+      : [value.split('/')[0], value.split('/').slice(1).join('/')];
+    if (!orgSlug || !path) {
+      throw new APIError(400, 'invalid_address', 'Use @host/work for your organization or org/host/work.');
+    }
+
+    const organization = await this.registry.getOrganizationBySlug(RequestData.normalizeOrgSlug(orgSlug));
+    const found = await this.registry.findActiveAddressByPath(organization.id, RequestData.normalizePath(path));
+    if (!found) {
+      throw new APIError(404, 'address_not_found', 'Active address not found.');
+    }
+    return RegistryService.publicAddress(organization.slug, found);
+  }
+
+  async createLocalInstall(accountId: string, hostHandle: string): Promise<{ organization: OrganizationRow; host: AddressRow; code: string; expiresAt: string }> {
+    const account = await this.accounts.getAccount(accountId);
+    const organization = await this.accounts.requireOrganization(account);
+    const host = await this.ensureHost(organization, hostHandle);
+    const enrollment = await this.enrollments.create(organization, host.handle);
+
+    return { organization, host, ...enrollment };
+  }
+}
+).test(host.path)) {
+      throw new APIError(403, 'smoke_host_cleanup_forbidden',
+        'Only the owner may revoke a Host belonging to the exact smoke run.');
+    }
+
+    const revoked = await this.registry.revokeEmptySmokeHost(host);
+
+    return { organization, host: revoked };
+  }
+
   async describe(accountId: string, workAddressId: string | null): Promise<JSONRecord> {
     const account = await this.accounts.getAccount(accountId);
     const organization = await this.accounts.findOrganization(account);

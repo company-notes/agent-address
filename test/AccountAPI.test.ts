@@ -78,6 +78,30 @@ describe('account API (plain HTTP, no MCP)', () => {
     expect(released.body.data.active).toBe(false);
   });
 
+  it('releases smoke Hosts only after their last Work was revoked', async () => {
+    const token = await signedInAccount();
+    const runId = 'aabbccddee';
+    const name = 'relay-smoke-' + runId + '-b';
+    const claimed = await client.call('POST', '/v1/account/work', {
+      token,
+      body: { organization: TestClient.uniqueName('org'), host: name, handle: name },
+    });
+    expect(claimed.status).toBe(201);
+    const hostId = claimed.body.data.host.id;
+
+    const premature = await client.call(
+      'DELETE', '/v1/account/host/' + hostId + '?run_id=' + runId, { token },
+    );
+    expect(premature.status).toBe(409);
+
+    await client.call('DELETE', '/v1/account/work/' + claimed.body.data.work.id, { token });
+    const deleted = await client.call(
+      'DELETE', '/v1/account/host/' + hostId + '?run_id=' + runId, { token },
+    );
+    expect(deleted.status).toBe(200);
+    expect(deleted.body.data.active).toBe(false);
+  });
+
   it('rejects status lookup of work addresses belonging to another organization', async () => {
     // Regression: a foreign workAddressId must not disclose another organization's work address.
     const ownerToken = await signedInAccount();

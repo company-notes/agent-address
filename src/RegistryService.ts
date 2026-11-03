@@ -333,6 +333,34 @@ export class RegistryService {
     return { ...address, revokedAt };
   }
 
+  async revokeEmptySmokeHost(address: AddressRow): Promise<AddressRow> {
+    const now = RegistryService.nowISO();
+    const results = await this.db.batch([
+      this.db.prepare(
+        `UPDATE addresses
+            SET revoked_at = ?
+          WHERE id = ? AND org_id = ? AND parent_address_id IS NULL AND revoked_at IS NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM addresses child
+              WHERE child.parent_address_id = ? AND child.revoked_at IS NULL
+            )`,
+      ).bind(now, address.id, address.orgId, address.id),
+      this.db.prepare(
+        `UPDATE credentials
+            SET revoked_at = ?
+          WHERE address_id = ? AND kind = 'address' AND revoked_at IS NULL
+            AND EXISTS (SELECT 1 FROM addresses WHERE id = ? AND revoked_at = ?)`,
+      ).bind(now, address.id, address.id, now),
+    ]);
+
+    if (results[0].meta.changes !== 1) {
+      throw new APIError(409, 'smoke_host_not_empty',
+        'Test Host still has active Work identities or was already revoked.');
+    }
+
+    return { ...address, revokedAt: now };
+  }
+
   async rotateAddressToken(address: AddressRow): Promise<string> {
     const token = TokenService.randomToken('addr');
     const tokenHash = await TokenService.sha256Hex(token);
