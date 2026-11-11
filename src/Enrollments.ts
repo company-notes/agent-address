@@ -52,15 +52,17 @@ export class EnrollmentService {
 
   async redeem(code: string): Promise<RedeemedEnrollment> {
     const codeHash = await TokenService.sha256Hex(code);
+    const now = RegistryService.nowISO();
+
     const claimed = await this.db
       .prepare(
         `UPDATE enrollments
             SET used_at = ?
           WHERE code_hash = ? AND used_at IS NULL AND expires_at > ?`,
       )
-      .bind(RegistryService.nowISO(), codeHash, RegistryService.nowISO())
+      .bind(now, codeHash, now)
       .run();
-    if (claimed.meta?.changes !== 1) {
+    if (claimed.meta.changes !== 1) {
       throw new APIError(400, 'invalid_enrollment', 'Enrollment code is invalid, expired or already used.');
     }
 

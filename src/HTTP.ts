@@ -17,6 +17,17 @@ export class RequestData {
   static readonly ORG_SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
   static readonly HANDLE_RE = /^[a-z0-9](?:[a-z0-9_-]{0,61}[a-z0-9])?$/;
 
+  static bearerToken(request: Request, errorMessage = 'Bearer token required.'): string {
+    const authorization = request.headers.get('authorization') ?? '';
+    const match = authorization.match(/^Bearer\\s+(.+)$/i);
+
+    if (!match) {
+      throw new APIError(401, 'unauthorized', errorMessage);
+    }
+
+    return match[1].trim();
+  }
+
   static async readJSON(request: Request): Promise<JSONRecord> {
     const contentType = request.headers.get('content-type') || '';
     if (!contentType.toLowerCase().includes('application/json')) {
@@ -26,7 +37,8 @@ export class RequestData {
     let data: unknown;
     try {
       data = await request.json();
-    } catch {
+    } catch (error) {
+      console.debug('Invalid JSON request body:', error);
       throw new APIError(400, 'invalid_json', 'Request body must be a JSON object.');
     }
 

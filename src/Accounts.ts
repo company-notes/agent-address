@@ -85,7 +85,9 @@ export class AccountService {
   }
 
   private static publicAccount(row: AccountCredentialRow): AccountRow {
-    return { id: row.id, email: row.email, orgId: row.orgId, createdAt: row.createdAt, authVersion: row.authVersion };
+    const { passwordHash, passwordSalt, ...account } = row;
+
+    return account;
   }
 
   constructor(

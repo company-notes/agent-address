@@ -45,11 +45,9 @@ describe('admin static assets binding', () => {
     expect(result.headers.get('location')).toBe(host + '/admin/');
   });
 
-  it('fails closed without an asset binding and disallows mutation methods', async () => {
-    const missing = await AdminAssets.handle(new Request(host + '/admin/'), {} as Env);
-    expect(missing.status).toBe(503);
-
+  it('disallows mutation methods on static assets', async () => {
     const mutation = await AdminAssets.handle(new Request(host + '/admin/', { method: 'POST' }), env);
+
     expect(mutation.status).toBe(405);
   });
 });

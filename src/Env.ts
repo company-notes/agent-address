@@ -2,7 +2,7 @@ import type { OAuthHelpers } from '@cloudflare/workers-oauth-provider';
 
 export interface Env {
   DB: D1Database;
-  ASSETS?: Fetcher;
+  ASSETS: Fetcher;
   REGISTRATION_KEY?: string;
   ADMIN_ACCESS_TEAM_NAME?: string;
   ADMIN_ACCESS_AUDIENCE?: string;

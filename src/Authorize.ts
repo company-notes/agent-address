@@ -130,9 +130,18 @@ export class AuthorizeController {
   private static parseOAuthRequest(serialized: string): AuthRequest {
     try {
       return JSON.parse(serialized) as AuthRequest;
-    } catch {
+    } catch (error) {
+      console.debug('Malformed OAuth authorization form:', error);
       throw new APIError(400, 'invalid_request', 'The authorization request is malformed.');
     }
+  }
+
+  private static parseIntent(value: string): 'signin' | 'signup' {
+    if (value !== 'signin' && value !== 'signup') {
+      throw new APIError(400, 'invalid_request', 'Unknown authorization form intent.');
+    }
+
+    return value;
   }
 
   private formValues(intent: 'signin' | 'signup', email: string, error: string | null): FormValues {
@@ -160,6 +169,7 @@ export class AuthorizeController {
     try {
       return await this.env.OAUTH_PROVIDER.parseAuthRequest(request);
     } catch (error) {
+      console.debug('Invalid OAuth authorization request:', error);
       throw new APIError(400, 'invalid_request', error instanceof Error ? error.message : 'Invalid authorization request.');
     }
   }
@@ -171,7 +181,7 @@ export class AuthorizeController {
   async submitForm(request: Request): Promise<Response> {
     const form = await request.formData();
     const oauthRequest = AuthorizeController.parseOAuthRequest(AuthorizeController.field(form, 'oauthRequest'));
-    const intent = AuthorizeController.field(form, 'intent') === 'signup' ? 'signup' : 'signin';
+    const intent = AuthorizeController.parseIntent(AuthorizeController.field(form, 'intent'));
     const email = AuthorizeController.field(form, 'email');
 
     let account: AccountRow;

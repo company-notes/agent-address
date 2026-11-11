@@ -40,7 +40,8 @@ export class AdminAuthenticator {
         algorithms: ['RS256'],
       });
       email = typeof verified.payload.email === 'string' ? verified.payload.email.trim().toLowerCase() : '';
-    } catch {
+    } catch (error) {
+      console.debug('Cloudflare Access JWT verification failed:', error);
       throw new APIError(401, 'admin_unauthorized', 'Cloudflare Access token is invalid.');
     }
 

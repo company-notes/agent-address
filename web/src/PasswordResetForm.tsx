@@ -21,6 +21,7 @@ export function PasswordResetForm({ accountId }: { accountId: string }) {
       form.resetFields();
       messageApi.success('Password updated. Existing Agent Address authorizations are no longer valid.');
     } catch (error) {
+      console.error('Admin password reset failed:', error);
       messageApi.error(error instanceof Error ? error.message : 'Password reset failed.');
     } finally {
       setSubmitting(false);

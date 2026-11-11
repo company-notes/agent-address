@@ -13,8 +13,8 @@ if (result.error) {
 
   try {
     report = JSON.parse(result.stdout);
-  } catch {
-    console.error('npm audit did not return valid JSON.');
+  } catch (error) {
+    console.error('npm audit did not return valid JSON:', error);
     console.error((result.stderr || result.stdout).slice(0, 1200));
     process.exitCode = 2;
   }
