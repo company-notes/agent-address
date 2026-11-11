@@ -60,7 +60,7 @@ if (domain) {
 const adminTeam = required('ADMIN_ACCESS_TEAM_NAME', /^[a-z0-9-]+$/, 'invalid Cloudflare Access team');
 const adminAudience = required('ADMIN_ACCESS_AUDIENCE', /^[0-9a-f]{64}$/i, 'expected a 64-character Access AUD tag');
 const allowedAdminEmails = required('ADMIN_ALLOWED_EMAILS',
-  /^[^\\s@,]+@[^\\s@,]+(?:,[^\\s@,]+@[^\\s@,]+)*$/i, 'expected comma-separated admin email addresses');
+  /^[^\s@,]+@[^\s@,]+(?:,[^\s@,]+@[^\s@,]+)*$/i, 'expected comma-separated admin email addresses');
 
 config.vars = {
   ...(config.vars ?? {}),
