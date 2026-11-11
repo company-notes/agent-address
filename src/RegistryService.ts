@@ -215,9 +215,12 @@ export class RegistryService {
           .bind(crypto.randomUUID(), id, tokenHash, createdAt),
       ]);
     } catch (error) {
+      console.debug('Organization registration write failed:', error);
+
       if (RegistryService.isUniqueViolation(error)) {
         throw new APIError(409, 'org_slug_taken', 'That organization slug is already registered.');
       }
+
       throw error;
     }
 
@@ -253,9 +256,12 @@ export class RegistryService {
           .bind(crypto.randomUUID(), org.id, id, tokenHash, createdAt),
       ]);
     } catch (error) {
+      console.debug('Address creation write failed:', error);
+
       if (RegistryService.isUniqueViolation(error)) {
         throw new APIError(409, 'address_taken', `@${path} already exists in ${org.slug}.`);
       }
+
       throw error;
     }
 
@@ -291,9 +297,12 @@ export class RegistryService {
           .bind(newPath, oldPath, address.orgId, oldPath, oldPath),
       ]);
     } catch (error) {
+      console.debug('Address rename write failed:', error);
+
       if (RegistryService.isUniqueViolation(error)) {
         throw new APIError(409, 'address_taken', `@${newPath} already exists.`);
       }
+
       throw error;
     }
 

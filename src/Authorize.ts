@@ -191,6 +191,8 @@ export class AuthorizeController {
       if (!(error instanceof APIError)) {
         throw error;
       }
+
+      console.debug('OAuth account authentication rejected:', error.code);
       return new AuthorizePage(oauthRequest).render(this.formValues(intent, email, error.message));
     }
 

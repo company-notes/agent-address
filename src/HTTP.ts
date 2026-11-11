@@ -137,6 +137,8 @@ export class ResponseData {
 
   static error(error: unknown): Response {
     if (error instanceof APIError) {
+      console.debug('Request rejected:', error.code, error.status);
+
       return this.json(
         {
           ok: false,
@@ -150,7 +152,8 @@ export class ResponseData {
       );
     }
 
-    console.error(error);
+    console.error('Unexpected API exception:', error);
+
     return this.json(
       {
         ok: false,
