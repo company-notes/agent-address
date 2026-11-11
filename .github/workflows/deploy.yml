@@ -36,8 +36,8 @@ jobs:
         env:
           CLOUDFLARE_D1_DATABASE_ID: "00000000-0000-0000-0000-000000000000"
           CLOUDFLARE_OAUTH_KV_ID: "00000000000000000000000000000000"
-          ADMIN_ACCESS_TEAM_NAME: "nuwainfo"
-          ADMIN_ALLOWED_EMAILS: "devops@nuwainfo.com"
+          ADMIN_ACCESS_TEAM_NAME: "example-team"
+          ADMIN_ALLOWED_EMAILS: "admin@example.test"
           ADMIN_ACCESS_AUDIENCE: "0000000000000000000000000000000000000000000000000000000000000000"
         run: |
           node scripts/prepare-deploy.mjs
@@ -69,8 +69,8 @@ jobs:
       CLOUDFLARE_D1_DATABASE_NAME: ${{ vars.CLOUDFLARE_D1_DATABASE_NAME }}
       CLOUDFLARE_WORKER_NAME: ${{ vars.CLOUDFLARE_WORKER_NAME }}
       CLOUDFLARE_CUSTOM_DOMAIN: ${{ vars.CLOUDFLARE_CUSTOM_DOMAIN }}
-      ADMIN_ACCESS_TEAM_NAME: "nuwainfo"
-      ADMIN_ALLOWED_EMAILS: "devops@nuwainfo.com"
+      ADMIN_ACCESS_TEAM_NAME: ${{ vars.ADMIN_ACCESS_TEAM_NAME }}
+      ADMIN_ALLOWED_EMAILS: ${{ vars.ADMIN_ALLOWED_EMAILS }}
       ADMIN_ACCESS_AUDIENCE: ${{ vars.ADMIN_ACCESS_AUDIENCE }}
     steps:
       - name: Check out source
