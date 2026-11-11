@@ -26,6 +26,10 @@ describe('account API (plain HTTP, no MCP)', () => {
     const status = await client.call('GET', '/v1/account/status', { token });
     expect(status.status).toBe(200);
     expect(status.body.data.organization).toBeNull();
+
+    const directory = await client.call('GET', '/v1/account/works', { token });
+    expect(directory.status).toBe(409);
+    expect(directory.body.error.code).toBe('no_organization');
   });
 
   it('registers the organization and claims a session in one call', async () => {
