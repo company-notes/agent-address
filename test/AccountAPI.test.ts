@@ -1,4 +1,7 @@
+import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
+
+import { Services } from '../src/Services';
 
 import { TestClient } from './Helpers';
 import { OAuthTestFlow } from './OAuthFlow';
@@ -86,6 +89,13 @@ describe('account API (plain HTTP, no MCP)', () => {
       },
     });
     expect(foreign.status).toBe(201);
+
+    // Registry supports hierarchical addresses, but a Relay Work recipient
+    // must be a direct child of an active Host, not a grandchild of a Work.
+    const services = new Services(env);
+    const organization = await services.registry.getOrganizationBySlug(slug);
+    const parentWork = await services.registry.getActiveAddressById(claimed[0].id);
+    await services.registry.createAddress(organization, 'nested', null, parentWork);
 
     const forbidden = await client.call('GET', '/v1/account/works?limit=2');
     expect(forbidden.status).toBe(401);
