@@ -7,11 +7,6 @@ export type FormValues = {
   needsRegistrationKey: boolean;
 };
 
-export type AccountProps = {
-  accountId: string;
-  authVersion?: number;
-};
-
 export class AuthorizePage {
   static readonly HEADERS = {
     'content-type': 'text/html; charset=utf-8',

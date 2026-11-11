@@ -6,6 +6,11 @@ import { Env } from './Env';
 import { APIError } from './HTTP';
 import { Services } from './Services';
 
+export type AccountProps = {
+  accountId: string;
+  authVersion?: number;
+};
+
 // Serves the OAuth authorization page where an account signs in or signs up, then completes the grant.
 export class AuthorizeController {
   static readonly PATH = '/authorize';
