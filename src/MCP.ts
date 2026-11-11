@@ -21,7 +21,9 @@ type PublicOrganization = {
   displayName: string;
 };
 
-type AccountAPIResponse<T> = { ok: boolean; data?: T; error?: { code: string; message: string } };
+type AccountAPIResponse<T> =
+  | { ok: true; data: T }
+  | { ok: false; error: { code: string; message: string } };
 
 // Thin in-process client for AccountController: it builds the same Request/Response shape a real
 // HTTP caller of the Account API would use, so every rule the API enforces applies to MCP too -
@@ -44,13 +46,18 @@ class AccountAPIClient {
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
     });
-    const response = await new AccountController(this.env).handleAuthenticated(this.identity.accountId, request, this.identity.authVersion);
+    const response = await new AccountController(this.env).handleAuthenticated(
+      this.identity.accountId,
+      request,
+      this.identity.authVersion,
+    );
     const payload = (await response.json()) as AccountAPIResponse<T>;
+
     if (!payload.ok) {
-      throw new Error(payload.error?.message ?? 'Account API request failed.');
+      throw new Error(payload.error.message);
     }
 
-    return payload.data as T;
+    return payload.data;
   }
 }
 
