@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 
 class AuditReporter {
-  static readonly MAX_BUFFER = 32 * 1024 * 1024;
+  static MAX_BUFFER = 32 * 1024 * 1024;
 
   static readReport() {
     const result = spawnSync('npm', ['audit', '--json'], {
