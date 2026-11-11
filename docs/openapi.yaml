@@ -236,6 +236,38 @@ paths:
         '200':
           description: Account, organization (or null), hosts and the named session (or null)
 
+  /v1/account/works:
+    get:
+      summary: List active Work recipients in this account's Organization
+      description: >
+        Returns direct child Work addresses of active Hosts, excluding revoked,
+        nested and cross-Organization addresses. Provides stable canonical Work
+        addresses and parent Host references; directory visibility does not
+        imply per-Bot OAuth access. Exact address resolution remains separate.
+      security:
+        - oauth: []
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+        - in: query
+          name: cursor
+          schema: { type: string, description: Exact last Work path from the previous page }
+        - in: query
+          name: search
+          schema: { type: string, minLength: 1, maxLength: 64 }
+      responses:
+        '200':
+          description: >
+            Object with items (active Work address records) and nextCursor
+            (the final Work path for the next page, or null).
+        '400':
+          description: Invalid limit, cursor or search
+        '401':
+          description: OAuth required
+        '409':
+          description: Account does not yet have an Organization
+
   /v1/account/work:
     post:
       summary: Name a session (register the organization/host if needed)
