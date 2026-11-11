@@ -26,15 +26,8 @@ jobs:
         run: npm ci
       - name: Typecheck
         run: npm run check
-      - name: Regenerate security-patched UI lockfile (temporary)
-        run: npm --prefix web install --package-lock-only --no-audit --no-fund
       - name: Install admin UI dependencies
         run: npm --prefix web ci --no-audit --no-fund
-      - name: Export patched dependency lockfile (temporary)
-        run: |
-          echo 'AGENT_ADDRESS_LOCKFILE_BEGIN'
-          cat web/package-lock.json
-          echo 'AGENT_ADDRESS_LOCKFILE_END'
       - name: Build admin UI
         run: npm --prefix web run build
       - name: Check admin UI dependencies (high/critical)
