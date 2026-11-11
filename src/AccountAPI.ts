@@ -59,6 +59,14 @@ export class AccountController {
       return ResponseData.ok(await this.services.sessions.describe(accountId, workAddressId));
     }
 
+    if (method === 'GET' && resource === 'works' && !addressId) {
+      return ResponseData.ok(await this.services.workDirectory.list(accountId, {
+        limit: url.searchParams.get('limit'),
+        cursor: url.searchParams.get('cursor'),
+        search: url.searchParams.get('search'),
+      }));
+    }
+
     if (method === 'POST' && resource === 'work' && !addressId) {
       return this.claimWork(accountId, request);
     }

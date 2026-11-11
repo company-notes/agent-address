@@ -136,12 +136,15 @@ Other services can call `/v1/account/*` directly using an OAuth access token in 
 
 ```text
 GET    /v1/account/status[?work_address_id=...]
+GET    /v1/account/works[?limit=50&cursor=host/work&search=term]
 POST   /v1/account/work                 {organization?, organizationDisplayName?, host?, handle?, displayName?}
 PATCH  /v1/account/work/{addressId}     {handle}
 DELETE /v1/account/work/{addressId}
 GET    /v1/account/resolve?address=@mypc/build-release
 POST   /v1/account/local-install        {host}
 ```
+
+`/v1/account/works` lists **active direct-Host-child Work addresses** in the authenticated account's Organization (not root Hosts), including canonical Work address, display name and parent Host. It returns `{ items, nextCursor }` with a 50-item default and a 100-item maximum; pass `nextCursor` and the same `search` to fetch further pages. The query is case-insensitive, and the endpoint returns no cross-Organization, revoked or nested addresses. The separate Relay MCP exposes this through `agentAddressListWorks`; `agentAddressResolve` still only resolves a known exact address. Directory visibility does not independently grant per-Bot Work authorization.
 
 These endpoints share `AccountController` with MCP. Each account belongs to one organization. A `host` is required when the account has multiple hosts. The `local-install` response's `enrollmentCode` can be exchanged for a host credential at `POST /v1/enrollments/redeem`. The complete API schema is in [docs/openapi.yaml](docs/openapi.yaml).
 
