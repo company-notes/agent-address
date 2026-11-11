@@ -184,6 +184,27 @@ export class RegistryService {
     return result.results;
   }
 
+  async listActiveWorks(
+    orgID: string,
+    cursor: string,
+    search: string,
+    limit: number,
+  ): Promise<AddressRow[]> {
+    const rows = await this.db.prepare(
+      `${RegistryService.ADDRESS_SELECT}
+       WHERE org_id = ? AND parent_address_id IS NOT NULL AND revoked_at IS NULL
+         AND (? = '' OR path COLLATE NOCASE > ? COLLATE NOCASE)
+         AND (
+           ? = '' OR instr(lower(path), lower(?)) > 0
+             OR instr(lower(COALESCE(display_name, '')), lower(?)) > 0
+         )
+       ORDER BY path COLLATE NOCASE ASC
+       LIMIT ?`,
+    ).bind(orgID, cursor, cursor, search, search, search, limit).all<AddressRow>();
+
+    return rows.results;
+  }
+
   async listActiveHosts(orgId: string): Promise<AddressRow[]> {
     const result = await this.db
       .prepare(
