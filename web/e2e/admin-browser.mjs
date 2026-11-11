@@ -70,7 +70,7 @@ try {
   page.on('pageerror', (error) => { pageErrors.push(error.message); });
   await page.route('**/v1/admin/**', async (route) => {
     const request = route.request();
-    const url = new URL(request.url);
+    const url = new URL(request.url());
     const options = { status: 200, contentType: 'application/json' };
     if (request.method() === 'GET' && url.pathname === '/v1/admin/accounts') {
       searchTerms.push(url.searchParams.get('search') ?? '');
