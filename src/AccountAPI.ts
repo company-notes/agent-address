@@ -18,13 +18,13 @@ export class AccountAuthenticator {
     return match[1].trim();
   }
 
-  static async authenticate(request: Request, env: Env): Promise<string> {
+  static async authenticate(request: Request, env: Env): Promise<AccountProps> {
     const summary = await env.OAUTH_PROVIDER.unwrapToken<AccountProps>(this.bearerToken(request));
     if (!summary) {
       throw new APIError(401, 'invalid_token', 'OAuth access token is invalid, expired or revoked.');
     }
 
-    return summary.grant.props.accountId;
+    return summary.grant.props;
   }
 }
 
@@ -44,11 +44,12 @@ export class AccountController {
   }
 
   async handle(request: Request): Promise<Response> {
-    const accountId = await AccountAuthenticator.authenticate(request, this.env);
-    return this.handleAuthenticated(accountId, request);
+    const identity = await AccountAuthenticator.authenticate(request, this.env);
+    return this.handleAuthenticated(identity.accountId, request, identity.authVersion);
   }
 
-  async handleAuthenticated(accountId: string, request: Request): Promise<Response> {
+  async handleAuthenticated(accountId: string, request: Request, authVersion = 0): Promise<Response> {
+    await this.services.accounts.assertAuthVersion(accountId, authVersion);
     const url = new URL(request.url);
     const method = request.method.toUpperCase();
     const [, , resource, addressId] = url.pathname.split('/').filter(Boolean).map(decodeURIComponent);

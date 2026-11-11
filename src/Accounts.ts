@@ -6,6 +6,7 @@ export type AccountRow = {
   email: string;
   orgId: string | null;
   createdAt: string;
+  authVersion: number;
 };
 
 type AccountCredentialRow = AccountRow & {
@@ -23,6 +24,14 @@ export class PasswordHasher {
 
   private static fromHex(hex: string): Uint8Array<ArrayBuffer> {
     return Uint8Array.from(hex.match(/.{2}/g) ?? [], (pair) => parseInt(pair, 16));
+  }
+
+  static async createCredentials(password: string): Promise<{ salt: string; hash: string }> {
+    if (password.length < this.MIN_LENGTH) {
+      throw new APIError(400, 'weak_password', `Password must be at least ${this.MIN_LENGTH} characters.`);
+    }
+    const salt = this.createSalt();
+    return { salt, hash: await this.hash(password, salt) };
   }
 
   static createSalt(): string {
@@ -62,6 +71,7 @@ export class AccountService {
   private static readonly EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
   private static readonly ACCOUNT_SELECT = `SELECT id, email, org_id AS orgId, created_at AS createdAt,
+                                                   auth_version AS authVersion,
                                                    password_hash AS passwordHash, password_salt AS passwordSalt
                                               FROM accounts`;
 
@@ -75,7 +85,7 @@ export class AccountService {
   }
 
   private static publicAccount(row: AccountCredentialRow): AccountRow {
-    return { id: row.id, email: row.email, orgId: row.orgId, createdAt: row.createdAt };
+    return { id: row.id, email: row.email, orgId: row.orgId, createdAt: row.createdAt, authVersion: row.authVersion };
   }
 
   constructor(
@@ -98,16 +108,12 @@ export class AccountService {
   ): Promise<AccountRow> {
     this.assertRegistrationKey(suppliedRegistrationKey);
     const normalizedEmail = AccountService.normalizeEmail(email);
-    if (password.length < PasswordHasher.MIN_LENGTH) {
-      throw new APIError(400, 'weak_password', `Password must be at least ${PasswordHasher.MIN_LENGTH} characters.`);
-    }
-
     if (linkedOrganization) {
       await this.assertOrganizationUnowned(linkedOrganization.id);
     }
 
     const id = crypto.randomUUID();
-    const salt = PasswordHasher.createSalt();
+    const credentials = await PasswordHasher.createCredentials(password);
     const createdAt = RegistryService.nowISO();
     try {
       await this.db
@@ -115,7 +121,7 @@ export class AccountService {
           `INSERT INTO accounts (id, email, password_hash, password_salt, org_id, created_at)
            VALUES (?, ?, ?, ?, ?, ?)`,
         )
-        .bind(id, normalizedEmail, await PasswordHasher.hash(password, salt), salt, linkedOrganization?.id ?? null, createdAt)
+        .bind(id, normalizedEmail, credentials.hash, credentials.salt, linkedOrganization?.id ?? null, createdAt)
         .run();
     } catch (error) {
       if (RegistryService.isUniqueViolation(error)) {
@@ -124,7 +130,7 @@ export class AccountService {
       throw error;
     }
 
-    return { id, email: normalizedEmail, orgId: linkedOrganization?.id ?? null, createdAt };
+    return { id, email: normalizedEmail, orgId: linkedOrganization?.id ?? null, createdAt, authVersion: 0 };
   }
 
   async logIn(email: string, password: string): Promise<AccountRow> {
@@ -153,6 +159,13 @@ export class AccountService {
     }
 
     return AccountService.publicAccount(row);
+  }
+
+  async assertAuthVersion(accountId: string, version: number): Promise<void> {
+    const account = await this.getAccount(accountId);
+    if (account.authVersion !== version) {
+      throw new APIError(401, 'authorization_revoked', 'This account must sign in again.');
+    }
   }
 
   async findOrganization(account: AccountRow): Promise<OrganizationRow | null> {

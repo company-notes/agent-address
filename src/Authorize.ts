@@ -14,6 +14,7 @@ type FormValues = {
 
 export type AccountProps = {
   accountId: string;
+  authVersion?: number;
 };
 
 class AuthorizePage {
@@ -183,7 +184,7 @@ export class AuthorizeController {
       return new AuthorizePage(oauthRequest).render(this.formValues(intent, email, error.message));
     }
 
-    const props: AccountProps = { accountId: account.id };
+    const props: AccountProps = { accountId: account.id, authVersion: account.authVersion };
     const { redirectTo } = await this.env.OAUTH_PROVIDER.completeAuthorization({
       request: oauthRequest,
       userId: account.id,

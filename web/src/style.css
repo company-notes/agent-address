@@ -1,0 +1,9 @@
+.admin-layout { min-height: 100vh; }
+.admin-header { display: flex; align-items: center; background: #10233b; }
+.admin-title { color: white !important; margin: 0 !important; }
+.admin-content { padding: 24px; }
+.account-detail { min-height: 360px; }
+.ant-table-row { cursor: pointer; }
+@media (max-width: 768px) {
+  .admin-content { padding: 12px; }
+}

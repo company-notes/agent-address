@@ -30,7 +30,7 @@ type AccountAPIResponse<T> = { ok: boolean; data?: T; error?: { code: string; me
 class AccountAPIClient {
   constructor(
     private readonly env: Env,
-    private readonly accountId: string,
+    private readonly identity: AccountProps,
   ) {}
 
   async call<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -44,7 +44,7 @@ class AccountAPIClient {
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
     });
-    const response = await new AccountController(this.env).handleAuthenticated(this.accountId, request);
+    const response = await new AccountController(this.env).handleAuthenticated(this.identity.accountId, request, this.identity.authVersion);
     const payload = (await response.json()) as AccountAPIResponse<T>;
     if (!payload.ok) {
       throw new Error(payload.error?.message ?? 'Account API request failed.');
@@ -76,7 +76,7 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
   );
 
   private get accountAPI(): AccountAPIClient {
-    return new AccountAPIClient(this.env, this.props!.accountId);
+    return new AccountAPIClient(this.env, this.props!);
   }
 
   private static textResult(data: unknown) {

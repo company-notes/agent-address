@@ -1,6 +1,7 @@
 import OAuthProvider from '@cloudflare/workers-oauth-provider';
 
 import { AuthorizeController } from './Authorize';
+import { AdminController } from './AdminController';
 import { Env } from './Env';
 import { ResponseData } from './HTTP';
 import { AddressMCP } from './MCP';
@@ -30,13 +31,19 @@ class PublicRoutes {
 
   static async fetch(request: Request, env: Env): Promise<Response> {
     try {
-      if (new URL(request.url).pathname === AuthorizeController.PATH) {
+      const pathname = new URL(request.url).pathname;
+      if (pathname === '/v1/admin' || pathname.startsWith('/v1/admin/')) {
+        return await new AdminController(env).handle(request);
+      }
+      if (pathname === AuthorizeController.PATH) {
         return await new AuthorizeController(env).handle(request);
       }
       return await this.handleREST(request, env);
     } catch (error) {
       const response = ResponseData.error(error);
-      response.headers.set('access-control-allow-origin', '*');
+      if (!new URL(request.url).pathname.startsWith('/v1/admin')) {
+        response.headers.set('access-control-allow-origin', '*');
+      }
       return response;
     }
   }

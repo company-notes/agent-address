@@ -3,13 +3,32 @@
   "name": "agent-address",
   "main": "src/Index.ts",
   "compatibility_date": "2026-09-09",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "workers_dev": true,
   "durable_objects": {
-    "bindings": [{ "name": "MCP_OBJECT", "class_name": "AddressMCP" }]
+    "bindings": [
+      {
+        "name": "MCP_OBJECT",
+        "class_name": "AddressMCP"
+      }
+    ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AddressMCP"] }],
-  "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "00000000000000000000000000000000" }],
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "AddressMCP"
+      ]
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "OAUTH_KV",
+      "id": "00000000000000000000000000000000"
+    }
+  ],
   "d1_databases": [
     {
       "binding": "DB",
@@ -17,5 +36,18 @@
       "database_id": "00000000-0000-0000-0000-000000000000",
       "migrations_dir": "migrations"
     }
-  ]
+  ],
+  "assets": {
+    "directory": "./web/dist",
+    "base_path": "/admin",
+    "run_worker_first": [
+      "/v1/*",
+      "/authorize",
+      "/mcp",
+      "/mcp/*",
+      "/register",
+      "/token",
+      "/.well-known/*"
+    ]
+  }
 }
