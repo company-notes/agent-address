@@ -8,18 +8,9 @@ import { Services } from './Services';
 // Authenticates a request's OAuth access token - the same token issued to /mcp clients - into the
 // account it belongs to. This is the only place that talks to the OAuth token store directly.
 export class AccountAuthenticator {
-  private static bearerToken(request: Request): string {
-    const authorization = request.headers.get('authorization') || '';
-    const match = authorization.match(/^Bearer\s+(.+)$/i);
-    if (!match) {
-      throw new APIError(401, 'unauthorized', 'Bearer OAuth access token required.');
-    }
-
-    return match[1].trim();
-  }
-
   static async authenticate(request: Request, env: Env): Promise<AccountProps> {
-    const summary = await env.OAUTH_PROVIDER.unwrapToken<AccountProps>(this.bearerToken(request));
+    const token = RequestData.bearerToken(request, 'Bearer OAuth access token required.');
+    const summary = await env.OAUTH_PROVIDER.unwrapToken<AccountProps>(token);
     if (!summary) {
       throw new APIError(401, 'invalid_token', 'OAuth access token is invalid, expired or revoked.');
     }

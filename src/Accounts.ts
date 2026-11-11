@@ -85,7 +85,9 @@ export class AccountService {
   }
 
   private static publicAccount(row: AccountCredentialRow): AccountRow {
-    return { id: row.id, email: row.email, orgId: row.orgId, createdAt: row.createdAt, authVersion: row.authVersion };
+    const { passwordHash, passwordSalt, ...account } = row;
+
+    return account;
   }
 
   constructor(
@@ -124,9 +126,12 @@ export class AccountService {
         .bind(id, normalizedEmail, credentials.hash, credentials.salt, linkedOrganization?.id ?? null, createdAt)
         .run();
     } catch (error) {
+      console.debug('Account registration write failed:', error);
+
       if (RegistryService.isUniqueViolation(error)) {
         throw new APIError(409, 'account_exists', 'An account with that email already exists.');
       }
+
       throw error;
     }
 
@@ -231,9 +236,12 @@ export class AccountService {
     try {
       await this.db.prepare('UPDATE accounts SET org_id = ? WHERE id = ?').bind(orgId, accountId).run();
     } catch (error) {
+      console.debug('Organization assignment failed:', error);
+
       if (RegistryService.isUniqueViolation(error)) {
         throw new APIError(409, 'organization_owned', 'That organization already belongs to another account.');
       }
+
       throw error;
     }
   }

@@ -11,8 +11,11 @@ async function get(path, origin = WORKER, init = {}) {
     signal: AbortSignal.timeout(20000),
     ...init,
   });
-  const location = response.headers.get('location') ?? '';
-  console.log(origin + path + ': HTTP ' + response.status + (location ? ' → ' + location.slice(0, 115) : ''));
+  const location = response.headers.get('location');
+  const redirect = location ? ' → ' + location.slice(0, 115) : '';
+
+  console.log(origin + path + ': HTTP ' + response.status + redirect);
+
   return response;
 }
 

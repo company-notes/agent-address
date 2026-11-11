@@ -28,8 +28,8 @@ async function waitUntilReady() {
       if (response.ok) {
         return;
       }
-    } catch {
-      // Keep polling until the local Vite server becomes available.
+    } catch (error) {
+      console.debug('Vite startup connection is not ready:', error);
     }
     await sleep(250);
   }

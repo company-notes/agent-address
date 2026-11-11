@@ -52,6 +52,22 @@ describe('OAuth', () => {
     expect(tokens.accessToken).toBeTruthy();
   });
 
+  it('rejects an unrecognized login intent instead of silently signing in', async () => {
+    const flow = new OAuthTestFlow();
+    await flow.registerClient();
+
+    const { oauthRequest } = await flow.openLoginPage();
+    const response = await flow.submitLogin({
+      intent: 'unknown-operation',
+      email: 'user@example.com',
+      password: 'a-long-password',
+    }, oauthRequest);
+
+    expect(response.status).toBe(400);
+    expect((await response.json()) as { error: { code: string } })
+      .toMatchObject({ error: { code: 'invalid_request' } });
+  });
+
   it('shows an error and issues no code for a wrong password', async () => {
     const { email } = await OAuthTestFlow.signUpAndGetToken();
     const flow = new OAuthTestFlow();

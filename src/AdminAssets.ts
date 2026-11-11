@@ -12,10 +12,6 @@ export class AdminAssets {
       return new Response(null, { status: 405, headers: { allow: 'GET, HEAD' } });
     }
 
-    if (!env.ASSETS) {
-      return new Response('Admin UI is not configured.', { status: 503 });
-    }
-
     const assetUrl = new URL(request.url);
     if (assetUrl.pathname === '/admin') {
       assetUrl.pathname = '/admin/';

@@ -26,6 +26,8 @@ jobs:
         run: npm ci
       - name: Typecheck
         run: npm run check
+      - name: Enforce code readability and exception-handling rules
+        run: npm run style:check
       - name: Install admin UI dependencies
         run: npm --prefix web ci --no-audit --no-fund
       - name: Build admin UI

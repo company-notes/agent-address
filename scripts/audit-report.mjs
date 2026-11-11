@@ -1,59 +1,81 @@
 import { spawnSync } from 'node:child_process';
 
-const result = spawnSync('npm', ['audit', '--json'], {
-  encoding: 'utf8',
-  maxBuffer: 32 * 1024 * 1024,
-});
+class AuditReporter {
+  static MAX_BUFFER = 32 * 1024 * 1024;
 
-if (result.error) {
-  console.error('Unable to run npm audit:', result.error.message);
-  process.exitCode = 2;
-} else {
-  let report;
+  static readReport() {
+    const result = spawnSync('npm', ['audit', '--json'], {
+      encoding: 'utf8',
+      maxBuffer: this.MAX_BUFFER,
+    });
 
-  try {
-    report = JSON.parse(result.stdout);
-  } catch {
-    console.error('npm audit did not return valid JSON.');
-    console.error((result.stderr || result.stdout).slice(0, 1200));
-    process.exitCode = 2;
-  }
+    if (result.error) {
+      throw result.error;
+    }
 
-  if (report) {
-    if (report.error || !report.metadata?.vulnerabilities) {
-      console.error('npm audit failed:', report.error?.summary || report.error?.code || 'Invalid response');
-      process.exitCode = 2;
-    } else {
-      const counts = report.metadata.vulnerabilities;
-      const entries = Object.entries(report.vulnerabilities || {})
-        .sort(([left], [right]) => left.localeCompare(right));
+    try {
+      return JSON.parse(result.stdout);
+    } catch (error) {
+      console.error('npm audit did not return valid JSON:', error);
+      console.error((result.stderr || result.stdout).slice(0, 1200));
 
-      console.log('npm audit total: ' + counts.total +
-        ' (critical ' + counts.critical +
-        ', high ' + counts.high +
-        ', moderate ' + counts.moderate +
-        ', low ' + counts.low + ')');
-
-      for (const [name, vulnerability] of entries) {
-        const fix = vulnerability.fixAvailable;
-        const remedy = fix === false
-          ? 'No fix'
-          : typeof fix === 'object'
-            ? 'Requires ' + fix.name + '@' + fix.version + (fix.isSemVerMajor ? ' (major)' : '')
-            : 'Fix available';
-
-        console.log(
-          vulnerability.severity.padEnd(8) + ' ' +
-          name.padEnd(36) + ' ' +
-          (vulnerability.isDirect ? 'direct' : 'transitive').padEnd(10) + ' ' +
-          remedy,
-        );
-      }
-
-      if (process.argv.includes('--enforce') && (counts.high > 0 || counts.critical > 0)) {
-        console.error('High/critical vulnerabilities remain. Resolve or explicitly review them.');
-        process.exitCode = 1;
-      }
+      throw error;
     }
   }
+
+  static remediation(vulnerability) {
+    const fix = vulnerability.fixAvailable;
+    if (fix === false) {
+      return 'No fix';
+    }
+
+    if (typeof fix === 'object') {
+      return 'Requires ' + fix.name + '@' + fix.version + (fix.isSemVerMajor ? ' (major)' : '');
+    }
+
+    return 'Fix available';
+  }
+
+  static printReport(report) {
+    if (report.error || !report.metadata?.vulnerabilities) {
+      throw new Error('npm audit failed: ' +
+        (report.error?.summary || report.error?.code || 'Invalid response'));
+    }
+
+    const counts = report.metadata.vulnerabilities;
+    console.log('npm audit total: ' + counts.total +
+      ' (critical ' + counts.critical +
+      ', high ' + counts.high +
+      ', moderate ' + counts.moderate +
+      ', low ' + counts.low + ')');
+
+    const entries = Object.entries(report.vulnerabilities || {})
+      .sort(([left], [right]) => left.localeCompare(right));
+
+    for (const [name, vulnerability] of entries) {
+      console.log(
+        vulnerability.severity.padEnd(8) + ' ' +
+        name.padEnd(36) + ' ' +
+        (vulnerability.isDirect ? 'direct' : 'transitive').padEnd(10) + ' ' +
+        this.remediation(vulnerability),
+      );
+    }
+
+    return counts;
+  }
+
+  static run(enforce) {
+    const counts = this.printReport(this.readReport());
+    if (enforce && (counts.high > 0 || counts.critical > 0)) {
+      console.error('High/critical vulnerabilities remain. Resolve or explicitly review them.');
+      process.exitCode = 1;
+    }
+  }
+}
+
+try {
+  AuditReporter.run(process.argv.includes('--enforce'));
+} catch (error) {
+  console.error('Unable to complete npm audit:', error);
+  process.exitCode = 2;
 }

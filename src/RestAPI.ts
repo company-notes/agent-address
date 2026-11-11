@@ -14,19 +14,9 @@ export class RegistryController {
     this.registry = this.services.registry;
   }
 
-  private bearerToken(request: Request): string {
-    const authorization = request.headers.get('authorization') || '';
-    const match = authorization.match(/^Bearer\s+(.+)$/i);
-    if (!match) {
-      throw new APIError(401, 'unauthorized', 'Bearer token required.');
-    }
-
-    return match[1].trim();
-  }
-
   private async authenticateOrganization(request: Request, orgSlug: string): Promise<OrganizationRow> {
     const organization = await this.registry.getOrganizationBySlug(RequestData.normalizeOrgSlug(orgSlug));
-    const credential = await this.registry.authenticate(this.bearerToken(request), 'org');
+    const credential = await this.registry.authenticate(RequestData.bearerToken(request), 'org');
     if (credential.orgId !== organization.id) {
       throw new APIError(403, 'wrong_organization', 'Credential does not belong to this organization.');
     }
@@ -35,7 +25,7 @@ export class RegistryController {
   }
 
   private async authenticateAddressOwner(request: Request, addressId: string, message: string): Promise<void> {
-    const credential = await this.registry.authenticate(this.bearerToken(request), 'address');
+    const credential = await this.registry.authenticate(RequestData.bearerToken(request), 'address');
     if (credential.addressId !== addressId) {
       throw new APIError(403, 'wrong_address', message);
     }
@@ -197,7 +187,7 @@ export class RegistryController {
   }
 
   async whoAmI(request: Request): Promise<Response> {
-    const credential = await this.registry.authenticate(this.bearerToken(request));
+    const credential = await this.registry.authenticate(RequestData.bearerToken(request));
     const organization = await this.registry.getOrganizationById(credential.orgId);
     if (credential.kind === 'org') {
       return ResponseData.ok({
