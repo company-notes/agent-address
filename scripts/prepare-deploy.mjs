@@ -55,5 +55,13 @@ if (domain) {
   config.routes = [{ pattern: domain, custom_domain: true }];
 }
 
+// Only the deployment bundle serves the independently built UI. Core tests and
+// Wrangler development do not need node_modules or a built web/ directory.
+config.assets = {
+  directory: './web/dist',
+  base_path: '/admin',
+  run_worker_first: ['/v1/*', '/authorize', '/mcp', '/mcp/*', '/register', '/token', '/.well-known/*'],
+};
+
 await writeFile(outputPath, JSON.stringify(config, null, 2) + '\n', { mode: 0o600 });
 console.log('Prepared deployment config for Worker: ' + config.name + (domain ? ' (Custom Domain: ' + domain + ')' : ''));
