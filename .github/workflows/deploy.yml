@@ -36,11 +36,17 @@ jobs:
         env:
           CLOUDFLARE_D1_DATABASE_ID: "00000000-0000-0000-0000-000000000000"
           CLOUDFLARE_OAUTH_KV_ID: "00000000000000000000000000000000"
-          ADMIN_ACCESS_TEAM_NAME: "example-team"
-          ADMIN_ALLOWED_EMAILS: "admin@example.test"
-          ADMIN_ACCESS_AUDIENCE: "0000000000000000000000000000000000000000000000000000000000000000"
+          ADMIN_ACCESS_TEAM_NAME: ${{ vars.ADMIN_ACCESS_TEAM_NAME }}
+          ADMIN_ALLOWED_EMAILS: ${{ vars.ADMIN_ALLOWED_EMAILS }}
+          ADMIN_ACCESS_AUDIENCE: ${{ vars.ADMIN_ACCESS_AUDIENCE }}
         run: |
           node scripts/prepare-deploy.mjs
+          node --input-type=module -e '
+            import { createHash } from "node:crypto";
+            for (const name of ["ADMIN_ACCESS_TEAM_NAME", "ADMIN_ALLOWED_EMAILS", "ADMIN_ACCESS_AUDIENCE"]) {
+              const value = process.env[name]?.trim() ?? "";
+              console.log(name + " fingerprint: " + createHash("sha256").update(value).digest("hex").slice(0, 16));
+            }'
           npx wrangler deploy --dry-run --config .wrangler.deploy.jsonc --outdir .wrangler-verify
       - name: Enforce dependency security (high/critical)
         run: npm run audit:check
