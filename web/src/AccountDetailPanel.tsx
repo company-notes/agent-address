@@ -14,13 +14,13 @@ export function AccountDetailPanel({ id }: { id: string | null }) {
   if (!id) {
     return <Card><Empty description="Select an account to inspect its addresses and credentials." /></Card>;
   }
-  if (query.isLoading) {
+  if (query.query.isLoading) {
     return <Card><Spin /></Card>;
   }
-  if (query.error) {
-    return <Alert type="error" message={query.error.message} showIcon />;
+  if (query.query.error) {
+    return <Alert type="error" message={query.query.error.message} showIcon />;
   }
-  const account = query.data?.data;
+  const account = query.result;
   if (!account) {
     return <Empty description="No account data." />;
   }

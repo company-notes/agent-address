@@ -1,4 +1,4 @@
-import type { DataProvider, CrudFilters } from '@refinedev/core';
+import type { BaseRecord, DataProvider, CrudFilters, GetListParams, GetOneParams, UpdateParams } from '@refinedev/core';
 
 type APIResult<T> = { ok: boolean; data?: T; error?: { code: string; message: string } };
 type Page<T> = { items: T[]; total: number };
@@ -28,31 +28,32 @@ export class AdminDataProvider {
   toRefineProvider(): DataProvider {
     return {
       getApiUrl: () => AdminDataProvider.BASE_URL,
-      getList: async ({ resource, pagination, filters }) => {
+      getList: async <TData extends BaseRecord = BaseRecord>({ resource, pagination, filters }: GetListParams) => {
         if (resource !== 'accounts') {
           throw new Error('Unsupported admin resource.');
         }
-        const current = pagination?.current ?? 1;
+        const current = pagination?.currentPage ?? 1;
         const pageSize = pagination?.pageSize ?? 20;
         const query = new URLSearchParams({
           offset: String((current - 1) * pageSize),
           limit: String(pageSize),
           search: AdminDataProvider.searchValue(filters),
         });
-        const result = await this.request<Page<Record<string, unknown>>>(`/accounts?${query}`);
+        const result = await this.request<Page<TData>>(`/accounts?${query}`);
         return { data: result.items, total: result.total };
       },
-      getOne: async ({ resource, id }) => {
+      getOne: async <TData extends BaseRecord = BaseRecord>({ resource, id }: GetOneParams) => {
         if (resource !== 'accounts') {
           throw new Error('Unsupported admin resource.');
         }
-        return { data: await this.request<Record<string, unknown>>(`/accounts/${encodeURIComponent(id)}`) };
+        return { data: await this.request<TData>(`/accounts/${encodeURIComponent(id)}`) };
       },
-      update: async ({ resource, id, variables }) => {
-        if (resource !== 'accounts' || typeof variables.password !== 'string') {
+      update: async <TData extends BaseRecord = BaseRecord, TVariables = {}>({ resource, id, variables }: UpdateParams<TVariables>) => {
+        if (resource !== 'accounts' || !variables || typeof variables !== 'object' ||
+            !('password' in variables) || typeof variables.password !== 'string') {
           throw new Error('Only account password reset is supported.');
         }
-        return { data: await this.request<Record<string, unknown>>(`/accounts/${encodeURIComponent(id)}/password`, {
+        return { data: await this.request<TData>(`/accounts/${encodeURIComponent(id)}/password`, {
           method: 'PUT',
           body: JSON.stringify({ password: variables.password }),
         }) };
