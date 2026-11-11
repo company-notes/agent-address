@@ -74,6 +74,8 @@ config.vars = {
 config.assets = {
   directory: './web/dist',
   binding: 'ASSETS',
+  // Avoid rewriting /index.html to /, which breaks /admin/ when fetched through ASSETS.
+  html_handling: 'none',
   // Run the Worker first to preserve all existing OAuth, REST, and MCP routes.
   // Cloudflare account does not support non-root assets.base_path.
   run_worker_first: true,

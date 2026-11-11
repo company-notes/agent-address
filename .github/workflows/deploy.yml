@@ -114,3 +114,19 @@ jobs:
         run: npx wrangler d1 migrations apply DB --remote --config .wrangler.deploy.jsonc
       - name: Deploy Cloudflare Worker
         run: npx wrangler deploy --config .wrangler.deploy.jsonc
+
+  smoke:
+    name: Smoke test published Worker
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Verify new deployment's live routes
+        run: node scripts/smoke-admin.mjs
