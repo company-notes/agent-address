@@ -111,8 +111,8 @@ try {
   await page.getByText('work.e2e-org.example.test').waitFor();
   await page.getByText('Credentials (metadata only)').waitFor();
 
-  await page.getByLabel('New password').fill('E2e-Password-2026!');
-  await page.getByLabel('Confirm new password').fill('E2e-Password-2026!');
+  await page.locator('input#password').fill('E2e-Password-2026!');
+  await page.locator('input#confirmPassword').fill('E2e-Password-2026!');
   await page.getByRole('button', { name: 'Reset password' }).click();
   await page.getByText('Password updated. Existing Agent Address authorizations are no longer valid.').waitFor();
   assert.deepEqual(passwordUpdates, [{ password: 'E2e-Password-2026!' }]);
