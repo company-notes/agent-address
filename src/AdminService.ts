@@ -12,7 +12,10 @@ export type AdminAccountRow = {
   workCount: number;
 };
 
-export type AdminAccountList = { items: AdminAccountRow[]; total: number };
+export type AdminAccountList = {
+  items: AdminAccountRow[];
+  total: number;
+};
 
 type AdminAuditRow = {
   id: string;
@@ -36,48 +39,87 @@ export class AdminService {
     private readonly registry: RegistryService,
   ) {}
 
+  private async credentialMetadata(orgId: string) {
+    const response = await this.db.prepare(`SELECT id, kind, address_id AS addressId,
+          created_at AS createdAt, revoked_at AS revokedAt
+          FROM credentials WHERE org_id = ? ORDER BY created_at DESC LIMIT 200`)
+      .bind(orgId)
+      .all();
+
+    return response.results;
+  }
+
+  private async enrollmentMetadata(orgId: string) {
+    const response = await this.db.prepare(`SELECT id, host_handle AS hostHandle,
+          expires_at AS expiresAt, used_at AS usedAt, created_at AS createdAt
+          FROM enrollments WHERE org_id = ? ORDER BY created_at DESC LIMIT 100`)
+      .bind(orgId)
+      .all();
+
+    return response.results;
+  }
+
+  private async auditHistory(accountId: string): Promise<AdminAuditRow[]> {
+    const response = await this.db.prepare(`SELECT id, actor_email AS actorEmail,
+          event_path AS eventPath, created_at AS createdAt
+          FROM admin_audit WHERE target_account_id = ?
+          ORDER BY created_at DESC LIMIT 50`)
+      .bind(accountId)
+      .all<AdminAuditRow>();
+
+    return response.results;
+  }
+
   async listAccounts(search: string, offset: number, limit: number): Promise<AdminAccountList> {
     const keyword = search.trim().toLowerCase();
     const condition = 'WHERE instr(lower(a.email), ?) > 0 OR instr(lower(coalesce(o.slug, \'\')), ?) > 0';
+
     const [countRow, records] = await Promise.all([
       this.db.prepare(`SELECT COUNT(*) AS count FROM accounts a
-        LEFT JOIN organizations o ON o.id = a.org_id ${condition}`).bind(keyword, keyword).first<{ count: number }>(),
+        LEFT JOIN organizations o ON o.id = a.org_id ${condition}`)
+        .bind(keyword, keyword)
+        .first<{ count: number }>(),
       this.db.prepare(`${AdminService.SUMMARY_SELECT} ${condition}
-        ORDER BY a.created_at DESC, a.id LIMIT ? OFFSET ?`).bind(keyword, keyword, limit, offset).all<AdminAccountRow>(),
+        ORDER BY a.created_at DESC, a.id LIMIT ? OFFSET ?`)
+        .bind(keyword, keyword, limit, offset)
+        .all<AdminAccountRow>(),
     ]);
-    return { items: records.results, total: countRow?.count ?? 0 };
+
+    return { items: records.results, total: countRow!.count };
   }
 
   async getAccount(id: string): Promise<JSONRecord> {
     const account = await this.db.prepare(`${AdminService.SUMMARY_SELECT} WHERE a.id = ?`)
-      .bind(id).first<AdminAccountRow>();
+      .bind(id)
+      .first<AdminAccountRow>();
+
     if (!account) {
       throw new APIError(404, 'account_not_found', 'Account not found.');
     }
 
-    const addresses = account.orgId ? await this.registry.listAddresses(account.orgId) : [];
-    const credentials = account.orgId
-      ? (await this.db.prepare(`SELECT id, kind, address_id AS addressId,
-            created_at AS createdAt, revoked_at AS revokedAt
-            FROM credentials WHERE org_id = ? ORDER BY created_at DESC LIMIT 200`)
-          .bind(account.orgId).all()).results
-      : [];
-    const enrollments = account.orgId
-      ? (await this.db.prepare(`SELECT id, host_handle AS hostHandle,
-            expires_at AS expiresAt, used_at AS usedAt, created_at AS createdAt
-            FROM enrollments WHERE org_id = ? ORDER BY created_at DESC LIMIT 100`)
-          .bind(account.orgId).all()).results
-      : [];
-    const auditEvents = (await this.db.prepare(`SELECT id, actor_email AS actorEmail,
-          event_path AS eventPath, created_at AS createdAt
-          FROM admin_audit WHERE target_account_id = ?
-          ORDER BY created_at DESC LIMIT 50`).bind(id).all<AdminAuditRow>()).results;
+    const auditEvents = await this.auditHistory(id);
+    if (!account.orgId) {
+      return {
+        ...account,
+        organization: null,
+        addresses: [],
+        credentials: [],
+        enrollments: [],
+        auditEvents,
+      };
+    }
 
-    const organization = account.orgId ? await this.registry.getOrganizationById(account.orgId) : null;
+    const [organization, addresses, credentials, enrollments] = await Promise.all([
+      this.registry.getOrganizationById(account.orgId),
+      this.registry.listAddresses(account.orgId),
+      this.credentialMetadata(account.orgId),
+      this.enrollmentMetadata(account.orgId),
+    ]);
+
     return {
       ...account,
-      organization: organization ? RegistryService.publicOrganization(organization) : null,
-      addresses: addresses.map((address) => RegistryService.publicAddress(organization!.slug, address)),
+      organization: RegistryService.publicOrganization(organization),
+      addresses: addresses.map((address) => RegistryService.publicAddress(organization.slug, address)),
       credentials,
       enrollments,
       auditEvents,
@@ -86,22 +128,25 @@ export class AdminService {
 
   async resetPassword(accountId: string, password: string, actorEmail: string): Promise<JSONRecord> {
     await this.accounts.getAccount(accountId);
+
     const { salt, hash } = await PasswordHasher.createCredentials(password);
     const createdAt = RegistryService.nowISO();
 
-    // D1 batch is atomic: the password change and its audit trail commit together.
+    // D1 batch commits the credential update and its audit event together.
     const [changed] = await this.db.batch([
       this.db.prepare(`UPDATE accounts SET password_hash = ?, password_salt = ?,
-             auth_version = auth_version + 1 WHERE id = ?`).bind(hash, salt, accountId),
+             auth_version = auth_version + 1 WHERE id = ?`)
+        .bind(hash, salt, accountId),
       this.db.prepare(`INSERT INTO admin_audit
              (id, actor_email, target_account_id, event_path, created_at)
-             VALUES (?, ?, ?, ?, ?)`).bind(
-               crypto.randomUUID(), actorEmail, accountId, '/accounts/password/update', createdAt,
-             ),
+             VALUES (?, ?, ?, ?, ?)`)
+        .bind(crypto.randomUUID(), actorEmail, accountId, '/accounts/password/update', createdAt),
     ]);
+
     if (changed.meta.changes !== 1) {
       throw new APIError(404, 'account_not_found', 'Account no longer exists.');
     }
+
     return { id: accountId, passwordChanged: true };
   }
 }
