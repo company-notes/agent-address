@@ -73,8 +73,10 @@ config.vars = {
 // Wrangler development do not need node_modules or a built web/ directory.
 config.assets = {
   directory: './web/dist',
-  base_path: '/admin',
-  run_worker_first: ['/v1/*', '/authorize', '/mcp', '/mcp/*', '/register', '/token', '/.well-known/*'],
+  binding: 'ASSETS',
+  // Run the Worker first to preserve all existing OAuth, REST, and MCP routes.
+  // Cloudflare account does not support non-root assets.base_path.
+  run_worker_first: true,
 };
 
 await writeFile(outputPath, JSON.stringify(config, null, 2) + '\n', { mode: 0o600 });

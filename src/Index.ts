@@ -2,6 +2,7 @@ import OAuthProvider from '@cloudflare/workers-oauth-provider';
 
 import { AuthorizeController } from './Authorize';
 import { AdminController } from './AdminController';
+import { AdminAssets } from './AdminAssets';
 import { Env } from './Env';
 import { ResponseData } from './HTTP';
 import { AddressMCP } from './MCP';
@@ -32,6 +33,9 @@ class PublicRoutes {
   static async fetch(request: Request, env: Env): Promise<Response> {
     try {
       const pathname = new URL(request.url).pathname;
+      if (AdminAssets.matches(pathname)) {
+        return await AdminAssets.handle(request, env);
+      }
       if (pathname === '/v1/admin' || pathname.startsWith('/v1/admin/')) {
         return await new AdminController(env).handle(request);
       }
