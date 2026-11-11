@@ -192,7 +192,11 @@ export class RegistryService {
   ): Promise<AddressRow[]> {
     const rows = await this.db.prepare(
       `${RegistryService.ADDRESS_SELECT}
-       WHERE org_id = ? AND parent_address_id IS NOT NULL AND revoked_at IS NULL
+       WHERE org_id = ? AND revoked_at IS NULL
+         AND parent_address_id IN (
+           SELECT id FROM addresses
+            WHERE org_id = ? AND parent_address_id IS NULL AND revoked_at IS NULL
+         )
          AND (? = '' OR path COLLATE NOCASE > ? COLLATE NOCASE)
          AND (
            ? = '' OR instr(lower(path), lower(?)) > 0
@@ -200,7 +204,7 @@ export class RegistryService {
          )
        ORDER BY path COLLATE NOCASE ASC
        LIMIT ?`,
-    ).bind(orgID, cursor, cursor, search, search, search, limit).all<AddressRow>();
+    ).bind(orgID, orgID, cursor, cursor, search, search, search, limit).all<AddressRow>();
 
     return rows.results;
   }
