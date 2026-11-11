@@ -19,7 +19,7 @@ export class RequestData {
 
   static bearerToken(request: Request, errorMessage = 'Bearer token required.'): string {
     const authorization = request.headers.get('authorization') ?? '';
-    const match = authorization.match(/^Bearer\\s+(.+)$/i);
+    const match = authorization.match(/^Bearer\s+(.+)$/i);
 
     if (!match) {
       throw new APIError(401, 'unauthorized', errorMessage);
