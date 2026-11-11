@@ -56,6 +56,97 @@ describe('account API (plain HTTP, no MCP)', () => {
     expect(ambiguous.body.error.code).toBe('host_required');
   });
 
+  it('lists active Work recipients rather than only Hosts, with scoped search and pagination', async () => {
+    const ownerToken = await signedInAccount();
+    const strangerToken = await signedInAccount();
+    const slug = TestClient.uniqueName('directory');
+    const ownWorks = [
+      { host: 'alpha-host', handle: 'cosmo', displayName: 'Cosmo Agent' },
+      { host: 'alpha-host', handle: 'grok', displayName: 'Grok Agent' },
+      { host: 'beta-host', handle: 'runner', displayName: 'Runner Agent' },
+    ];
+
+    const claimed = [];
+    for (const work of ownWorks) {
+      const result = await client.call('POST', '/v1/account/work', {
+        token: ownerToken,
+        body: { organization: slug, ...work },
+      });
+      expect(result.status).toBe(201);
+      claimed.push(result.body.data.work);
+    }
+
+    const foreign = await client.call('POST', '/v1/account/work', {
+      token: strangerToken,
+      body: {
+        organization: TestClient.uniqueName('foreign'),
+        host: 'unknown',
+        handle: 'secret',
+        displayName: 'Foreign Agent',
+      },
+    });
+    expect(foreign.status).toBe(201);
+
+    const forbidden = await client.call('GET', '/v1/account/works?limit=2');
+    expect(forbidden.status).toBe(401);
+
+    const first = await client.call('GET', '/v1/account/works?limit=2', {
+      token: ownerToken,
+    });
+    expect(first.status).toBe(200);
+    expect(first.body.data.items).toHaveLength(2);
+    expect(first.body.data.items.every((item: any) => item.kind === 'work')).toBe(true);
+    expect(first.body.data.items.map((item: any) => item.address))
+      .toEqual(['@alpha-host/cosmo', '@alpha-host/grok']);
+    expect(first.body.data.nextCursor).toBe('alpha-host/grok');
+
+    const second = await client.call('GET',
+      '/v1/account/works?limit=2&cursor=' + encodeURIComponent(first.body.data.nextCursor),
+      { token: ownerToken },
+    );
+    expect(second.status).toBe(200);
+    expect(second.body.data.items.map((item: any) => item.address))
+      .toEqual(['@beta-host/runner']);
+    expect(second.body.data.nextCursor).toBeNull();
+    expect(JSON.stringify([...first.body.data.items, ...second.body.data.items]))
+      .not.toContain('unknown/secret');
+
+    const filtered = await client.call('GET',
+      '/v1/account/works?search=GROK', { token: ownerToken },
+    );
+    expect(filtered.status).toBe(200);
+    expect(filtered.body.data.items.map((item: any) => item.id)).toEqual([claimed[1].id]);
+
+    const revoked = await client.call('DELETE', '/v1/account/work/' + claimed[1].id,
+      { token: ownerToken });
+    expect(revoked.status).toBe(200);
+
+    const afterRevoke = await client.call('GET', '/v1/account/works', { token: ownerToken });
+    expect(afterRevoke.body.data.items).toHaveLength(2);
+    expect(afterRevoke.body.data.items.map((item: any) => item.id)).not.toContain(claimed[1].id);
+
+    const foreignDirectory = await client.call('GET', '/v1/account/works',
+      { token: strangerToken });
+    expect(foreignDirectory.body.data.items).toHaveLength(1);
+    expect(foreignDirectory.body.data.items[0].canonical).toBe(foreign.body.data.work.canonical);
+    expect(JSON.stringify(foreignDirectory.body.data.items)).not.toContain(slug);
+  });
+
+  it('rejects invalid Work directory pagination and search values', async () => {
+    const token = await signedInAccount();
+    const created = await client.call('POST', '/v1/account/work', {
+      token,
+      body: { organization: TestClient.uniqueName('directory'), host: 'bot', handle: 'agent' },
+    });
+    expect(created.status).toBe(201);
+
+    for (const query of ['limit=0', 'limit=101', 'limit=1.5', 'cursor=other/..',
+      'search=' + 'x'.repeat(65)]) {
+      const response = await client.call('GET', '/v1/account/works?' + query, { token });
+      expect(response.status, query).toBe(400);
+    }
+  });
+
   it('renames, resolves and releases a claimed work address', async () => {
     const token = await signedInAccount();
     const slug = TestClient.uniqueName('org');
