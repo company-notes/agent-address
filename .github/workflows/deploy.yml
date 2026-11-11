@@ -28,6 +28,11 @@ jobs:
         run: npm run check
       - name: Install admin UI dependencies
         run: npm --prefix web install --no-audit --no-fund
+      - name: Export resolved UI lockfile
+        run: |
+          echo 'AGENT_ADDRESS_LOCKFILE_BEGIN'
+          cat web/package-lock.json
+          echo 'AGENT_ADDRESS_LOCKFILE_END'
       - name: Build admin UI
         run: npm --prefix web run build
       - name: Enforce dependency security (high/critical)
