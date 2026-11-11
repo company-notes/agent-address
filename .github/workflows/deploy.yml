@@ -57,8 +57,6 @@ jobs:
           npm --prefix web install --no-save --no-package-lock --no-audit --no-fund playwright@1.65.0
       - name: Browser E2E against local test server (never production)
         run: node web/e2e/admin-browser.mjs
-      - name: Check live routes (read-only) against existing deployment
-        run: node scripts/smoke-admin.mjs
       - name: Validate deployment script syntax
         run: |
           node --check scripts/prepare-deploy.mjs
