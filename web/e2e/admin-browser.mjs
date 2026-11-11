@@ -61,7 +61,7 @@ const detail = {
 let browser;
 try {
   await waitUntilReady();
-  browser = await chromium.launch({ headless: true });
+  browser = await chromium.launch({ headless: true, channel: 'chrome' });
   const page = await browser.newPage();
   const pageErrors = [];
   const searchTerms = [];

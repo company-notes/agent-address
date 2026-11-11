@@ -52,10 +52,9 @@ jobs:
         run: npm run audit:check
       - name: Run tests
         run: npm test
-      - name: Install pinned real-browser test runner
+      - name: Install pinned Playwright (use runner's preinstalled Chrome)
         run: |
           npm --prefix web install --no-save --no-package-lock --no-audit --no-fund playwright@1.65.0
-          npx --prefix web playwright install --with-deps chromium
       - name: Browser E2E against local test server (never production)
         run: node web/e2e/admin-browser.mjs
       - name: Validate deployment script syntax
