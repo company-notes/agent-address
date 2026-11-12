@@ -32,6 +32,7 @@ describe('HTTP error reporting never logs untrusted secret-bearing content', () 
       ok: false,
       error: { code: 'internal_error' },
     });
+
     expect(error.mock.calls, 'Central error logging must report only the exception type')
       .toEqual([['Unexpected API exception:', 'Error']]);
   });
