@@ -2,9 +2,14 @@ import { Refine } from '@refinedev/core';
 import { ConfigProvider, Layout, Typography } from 'antd';
 
 import { AccountsPage } from './AccountsPage';
+import { PortalApp } from './PortalApp';
 import { adminDataProvider } from './AdminDataProvider';
 
 export function App() {
+  if (window.location.pathname.startsWith('/portal')) {
+    return <PortalApp />;
+  }
+
   return (
     <ConfigProvider>
       <Refine

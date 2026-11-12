@@ -1,6 +1,6 @@
 import OAuthProvider from '@cloudflare/workers-oauth-provider';
 
-import { AdminAssets } from './AdminAssets';
+import { UIAssets } from './UIAssets';
 import { AdminController } from './AdminController';
 import { AuthorizeController } from './Authorize';
 import { Env } from './Env';
@@ -28,8 +28,8 @@ class ApplicationRouter {
         return await new AdminController(env).handle(request);
       }
 
-      if (AdminAssets.matches(path)) {
-        return await AdminAssets.handle(request, env);
+      if (UIAssets.matches(path)) {
+        return await UIAssets.handle(request, env);
       }
 
       if (path === AuthorizeController.PATH) {
