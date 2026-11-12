@@ -57,7 +57,7 @@ class D1CutoverGuard {
   }
 
   static assertSafe(tables) {
-    const productTables = tables.filter((name) => name !== 'd1_migrations');
+    const productTables = tables.filter((name) => name !== 'd1_migrations' && name !== '_cf_METADATA');
     if (productTables.length === 0) {
       console.log('D1 schema cutover: empty target database; safe for new schema migration.');
 
