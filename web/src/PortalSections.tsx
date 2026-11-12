@@ -104,7 +104,7 @@ export function SessionRegistryCard({
   agent: Agent | null;
   sessions: Session[];
   loading: boolean;
-  onCreate: (fields: SessionFields) => void;
+  onCreate: (agentID: string, fields: SessionFields) => void;
 }) {
   return (
     <Card title={agent ? `Sessions: ${agent.handle}` : 'Sessions'}>
@@ -125,7 +125,7 @@ export function SessionRegistryCard({
 
           <Divider />
 
-          <Form layout="vertical" onFinish={onCreate}>
+          <Form layout="vertical" onFinish={(fields: SessionFields) => onCreate(agent.id, fields)}>
             <Form.Item name="newSessionName" label="New Session handle (optional)">
               <Input placeholder="ffl-dev" />
             </Form.Item>

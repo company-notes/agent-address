@@ -92,18 +92,14 @@ export function PortalApp() {
     });
   }
 
-  async function createSession(fields: SessionFields): Promise<void> {
-    if (!selectedAgent) {
-      throw new Error('Select an Agent before creating a Session.');
-    }
-
+  async function createSession(agentID: string, fields: SessionFields): Promise<void> {
     await action(async () => {
       setIdentity(await PortalAPI.createSession(
-        selectedAgent.id,
+        agentID,
         fields.newSessionName?.trim() ?? '',
       ));
 
-      setSessions(await PortalAPI.sessions(selectedAgent.id));
+      setSessions(await PortalAPI.sessions(agentID));
     });
   }
 
@@ -181,7 +177,7 @@ export function PortalApp() {
                         agent={selectedAgent}
                         sessions={sessions}
                         loading={working}
-                        onCreate={(fields) => void createSession(fields)}
+                        onCreate={(agentID, fields) => void createSession(agentID, fields)}
                       />
                     </Col>
                   </Row>
