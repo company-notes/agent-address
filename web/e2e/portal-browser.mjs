@@ -146,7 +146,7 @@ try {
 
   // Switching the default lets us archive the old main without losing the Agent identity.
   await page.getByRole('button', { name: 'Make Default' }).last().click();
-  await page.getByRole('button', { name: 'Archive Session' }).first().click();
+  await page.getByRole('button', { name: 'Archive Session' }).last().click();
   await page.getByRole('button', { name: 'Archive Session' }).last().click();
   await page.getByRole('heading', { name: slug + '/xiaomei/main', exact: true }).waitFor({
     state: 'detached',
