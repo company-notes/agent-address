@@ -7,7 +7,7 @@ export class TokenService {
     return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
   }
 
-  static randomToken(prefix: 'org' | 'addr' | 'enr'): string {
+  static randomToken(prefix: 'org' | 'addr' | 'enr' | 'resume' | 'runtime'): string {
     const bytes = crypto.getRandomValues(new Uint8Array(32));
     return `${prefix}_${this.base64URL(bytes)}`;
   }
