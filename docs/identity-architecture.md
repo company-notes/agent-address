@@ -1,6 +1,6 @@
 # Agent Address：Agent／Session 身分與定址架構
 
-> **文件定位：目標架構與領域規則。** 本文是後續資料模型、API、MCP 工具與 Organization Portal 的設計依據，**不是目前已上線功能的說明**。既有實作仍使用 Organization／Host／Work；實作現況與操作方式以 [README](../README.md) 和 [OpenAPI](openapi.yaml) 為準。
+> **文件定位：目標架構與領域規則。** 本文是後續資料模型、API（程式對外提供的操作介面）、MCP（Model Context Protocol，讓 AI 應用呼叫工具的協定）與組織管理介面的設計依據，**不是目前已上線功能的說明**。現有系統仍以 Host（機器／執行環境的名稱）與 Work（該環境底下的工作地址）分類；實作現況以 [README](../README.md) 和 [OpenAPI](openapi.yaml) 為準。
 
 ## 1. Agent Address 要解決什麼問題？
 
@@ -92,7 +92,7 @@ nuwa/researcher/weekly-report
 
 ### 5.1 先確定 Organization，再確定 Agent／Session
 
-1. 使用者透過 MCP 所支援的登入流程，以自己的 Email 帳號完成身分驗證。
+1. 使用者透過 MCP 所支援的登入流程，以自己的 Email 帳號完成身分驗證；現行服務以 OAuth（登入與授權協定）處理這項流程。
 2. 系統根據帳號與組織的授權關係，確定可操作的 Organization；不讓 Agent 自行宣稱屬於任意組織。
 3. 這次啟動若沒有既有合法身分，就**建立新 Agent 及其 Session**；若有恢復資訊，就走**Resume**，兩者不能混淆。
 4. 成功後一律回傳可複製、可再次查詢的**完整三層地址**，並顯示 Agent／Session 各是哪個名稱。
@@ -208,7 +208,7 @@ Portal 應從組織整體往下呈現：Organization → Agent 清單 → Agent 
 遷移的硬性要求：
 
 - **不可全域搜尋取代 Host→Agent、Work→Session 就當作完成。** 要確認舊資料、憑證持有者、Resume 行為與對外 API。
-- 不修改已套用的 D1 migration；新資料結構一律採新增 migration，並有真實 D1 測試。
+- 不修改已套用的 D1 migration（D1 是現行 Cloudflare SQL 資料庫；migration 是一次性的結構變更檔）；新資料結構一律採新增 migration，並有真實 D1 測試。
 - 既有地址、OAuth／MCP／REST 客戶端及外部訊息整合需要有可驗證的相容或明確遷移策略，不能靜默重新解釋舊地址。
 - UI、API Controller、授權及領域核心維持分層。核心判定 Agent／Session 身分；各種 Bot 或 MCP 整合只轉交明確的登記與恢復意圖。
 - 實作遵循專案的 [CODE_PRINCIPLES.md](../CODE_PRINCIPLES.md)，特別是職責分離、不要吞例外、避免無必要的 defensive programming，以及 Rule 20 的語意分組。
