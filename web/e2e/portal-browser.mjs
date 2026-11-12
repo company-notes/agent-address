@@ -124,7 +124,7 @@ try {
 
   await page.locator('#newSessionName').fill('ffl-dev');
   await page.getByRole('button', { name: 'Create Session' }).click();
-  await page.getByText(slug + '/xiaoming/ffl-dev').waitFor({ timeout: 15000 });
+  await page.getByRole('heading', { name: slug + '/xiaoming/ffl-dev', exact: true }).waitFor({ timeout: 15000 });
 
   assert.deepEqual(pageErrors, [], 'Browser must have no uncaught script errors');
   console.log('PASS: real Chromium + Worker + OAuth + D1 — Portal signup, Organization, Agent and Sessions');
