@@ -108,6 +108,13 @@ try {
   const email = 'portal-' + Date.now().toString(36) + '@example.test';
   await page.locator('#su-email').fill(email);
   await page.locator('#su-password').fill('Portal-password-2026!');
+  await page.locator('#su-confirm-password').fill('incorrect-password-confirmation');
+  await page.locator('#su-key').fill(registrationKey);
+  await page.getByRole('button', { name: 'Create account' }).click();
+
+  await page.getByRole('alert').getByText('Passwords do not match').waitFor();
+  await page.locator('#su-password').fill('Portal-password-2026!');
+  await page.locator('#su-confirm-password').fill('Portal-password-2026!');
   await page.locator('#su-key').fill(registrationKey);
   await page.getByRole('button', { name: 'Create account' }).click();
 
