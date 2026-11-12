@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Read-only safety gate before migrating or deploying the new Agent/Session schema.
 import { execFileSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 
-class D1CutoverGuard {
+export class D1CutoverGuard {
   static CURRENT_TABLES = [
     'accounts',
     'admin_audit',
@@ -57,7 +58,9 @@ class D1CutoverGuard {
   }
 
   static assertSafe(tables) {
-    const productTables = tables.filter((name) => name !== 'd1_migrations' && name !== '_cf_METADATA');
+    const productTables = tables.filter((name) =>
+      name !== 'd1_migrations' && name !== '_cf_METADATA' && name !== '_cf_KV',
+    );
     if (productTables.length === 0) {
       console.log('D1 schema cutover: empty target database; safe for new schema migration.');
 
@@ -87,4 +90,6 @@ class D1CutoverGuard {
   }
 }
 
-D1CutoverGuard.main(process.argv.slice(2));
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  D1CutoverGuard.main(process.argv.slice(2));
+}
