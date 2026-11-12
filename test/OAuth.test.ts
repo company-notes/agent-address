@@ -82,6 +82,43 @@ describe('OAuth', () => {
     expect(tokens.refreshToken).toBeTruthy();
   });
 
+  it('keeps the authoritative grant identity stable across access-token refresh but isolates a new grant', async () => {
+    const flow = new OAuthTestFlow();
+    const email = `${TestClient.uniqueName('grant')}@example.com`;
+    const first = await flow.authorizeAccount('signup', email, password);
+
+    expect(first.refreshToken).toBeTruthy();
+
+    const fingerprint = async (token: string) => {
+      const response = await exports.default.fetch(new Request(
+        `${TestClient.ORIGIN}/v2/account/grant`, {
+          headers: { authorization: 'Bearer ' + token },
+        },
+      ));
+      expect(response.status).toBe(200);
+      const result = await response.json() as { data: { grantFingerprint: string } };
+      expect(result.data.grantFingerprint).toMatch(/^[a-f0-9]{64}$/);
+
+      return result.data.grantFingerprint;
+    };
+
+    const originalGrant = await fingerprint(first.accessToken);
+    const refreshed = await flow.refresh(first.refreshToken!);
+
+    expect(refreshed.accessToken).not.toBe(first.accessToken);
+    expect(await fingerprint(refreshed.accessToken)).toBe(originalGrant);
+
+    const otherFlow = new OAuthTestFlow();
+    const other = await otherFlow.authorizeAccount('signin', email, password);
+
+    expect(await fingerprint(other.accessToken)).not.toBe(originalGrant);
+
+    const missing = await exports.default.fetch(new Request(
+      `${TestClient.ORIGIN}/v2/account/grant`,
+    ));
+    expect(missing.status).toBe(401);
+  });
+
   it('signs an existing account in', async () => {
     const { email } = await OAuthTestFlow.signUpAndGetToken();
     const tokens = await new OAuthTestFlow().authorizeAccount('signin', email, password);
