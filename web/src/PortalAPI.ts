@@ -136,7 +136,7 @@ export class PortalAPI {
   }
 
   static setDefaultSession(sessionID: string): Promise<Session> {
-    return this.request('PUT', '/sessions/' + encodeURIComponent(sessionID) + '/default');
+    return this.request('PUT', '/sessions/' + encodeURIComponent(sessionID) + '/default-selection');
   }
 
   static archiveSession(sessionID: string): Promise<{ id: string; archived: true }> {
@@ -144,6 +144,6 @@ export class PortalAPI {
   }
 
   static rotateResumeToken(sessionID: string): Promise<{ resumeToken: string }> {
-    return this.request('POST', '/sessions/' + encodeURIComponent(sessionID) + '/rotate-resume');
+    return this.request('PUT', '/sessions/' + encodeURIComponent(sessionID) + '/resume-credential');
   }
 }

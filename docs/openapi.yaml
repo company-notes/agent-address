@@ -52,7 +52,7 @@ paths:
       responses:
         '201': { description: Agent/Session identity and one-time resume capability }
         '409': { description: Name conflict or no Organization }
-  /v2/account/agents/claim:
+  /v2/account/agent-runtime-leases:
     post:
       summary: Create a new Agent and Default Session with an exclusive Runtime lease
       requestBody:
@@ -104,7 +104,7 @@ paths:
               $ref: '#/components/schemas/NewSession'
       responses:
         '201': { description: New Session and one-time capabilities }
-  /v2/account/agents/{agentID}/sessions/claim:
+  /v2/account/agents/{agentID}/session-runtime-leases:
     parameters:
       - $ref: '#/components/parameters/agentID'
     post:
@@ -143,24 +143,24 @@ paths:
       responses:
         '200': { description: Session archived }
         '409': { description: Assign another Default Session first }
-  /v2/account/sessions/{sessionID}/default:
+  /v2/account/sessions/{sessionID}/default-selection:
     parameters:
       - $ref: '#/components/parameters/sessionID'
     put:
       summary: Set the Agent's Default Session
       responses:
         '200': { description: Default Session changed atomically }
-  /v2/account/sessions/{sessionID}/rotate-resume:
+  /v2/account/sessions/{sessionID}/resume-credential:
     parameters:
       - $ref: '#/components/parameters/sessionID'
-    post:
+    put:
       summary: Replace an existing Session's private resume capability
       responses:
         '200': { description: New one-time Resume Token; existing Runtime lease remains active }
-  /v2/account/sessions/{sessionID}/resume:
+  /v2/account/sessions/{sessionID}/runtime-lease:
     parameters:
       - $ref: '#/components/parameters/sessionID'
-    post:
+    put:
       summary: Resume an unoccupied Session with a private resume capability
       requestBody:
         required: true
@@ -176,10 +176,7 @@ paths:
         '200': { description: New Runtime capability and existing Session identity }
         '403': { description: Invalid resume capability }
         '409': { description: Session already held by an active Runtime }
-  /v2/account/sessions/{sessionID}/heartbeat:
-    parameters:
-      - $ref: '#/components/parameters/sessionID'
-    post:
+    patch:
       summary: Renew the exclusive Runtime lease
       requestBody:
         required: true
@@ -190,10 +187,7 @@ paths:
       responses:
         '200': { description: Renewed expiration }
         '409': { description: Runtime is no longer the owner }
-  /v2/account/sessions/{sessionID}/release:
-    parameters:
-      - $ref: '#/components/parameters/sessionID'
-    post:
+    delete:
       summary: Release Runtime ownership without deleting Session identity
       requestBody:
         required: true
@@ -202,8 +196,8 @@ paths:
             schema:
               $ref: '#/components/schemas/RuntimeCapability'
       responses:
-        '200': { description: Session is available for a subsequent authorized resume }
-  /v2/account/resolve:
+        '200': { description: Session available for a subsequent authorized resume }
+  /v2/account/addresses:
     get:
       summary: Resolve a canonical Session address or an Agent default Session
       parameters:

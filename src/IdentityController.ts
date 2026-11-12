@@ -65,8 +65,8 @@ export class IdentityController {
       return ResponseData.ok(await this.services.organizations.updateDisplayName(accountID, displayName));
     }
 
-    if (method === 'POST' && resource === 'agents' && identifier === 'claim' &&
-        segments.length === 4) {
+    if (method === 'POST' && resource === 'agent-runtime-leases' &&
+        segments.length === 3) {
       const data = await RequestData.readJSON(request);
 
       return ResponseData.ok(
@@ -75,8 +75,8 @@ export class IdentityController {
       );
     }
 
-    if (resource === 'agents' && identifier && action === 'sessions' &&
-        segments[5] === 'claim' && segments.length === 6 && method === 'POST') {
+    if (resource === 'agents' && identifier && action === 'session-runtime-leases' &&
+        segments.length === 5 && method === 'POST') {
       const data = await RequestData.readJSON(request);
 
       return ResponseData.ok(
@@ -146,20 +146,21 @@ export class IdentityController {
     }
 
     if (resource === 'sessions' && identifier && segments.length === 5 &&
-        method === 'PUT' && action === 'default') {
+        method === 'PUT' && action === 'default-selection') {
       return ResponseData.ok(await this.services.identities.setDefaultSession(accountID, identifier));
     }
 
     if (resource === 'sessions' && identifier && segments.length === 5 &&
-        method === 'POST' && action === 'rotate-resume') {
+        method === 'PUT' && action === 'resume-credential') {
       return ResponseData.ok(await this.services.identities.rotateResumeToken(accountID, identifier));
     }
 
-    if (method === 'POST' && resource === 'sessions' && identifier && action && segments.length === 5) {
-      return this.sessionAction(accountID, identifier, action, request);
+    if (resource === 'sessions' && identifier && action === 'runtime-lease' &&
+        segments.length === 5 && ['PUT', 'PATCH', 'DELETE'].includes(method)) {
+      return this.sessionRuntime(accountID, identifier, request);
     }
 
-    if (method === 'GET' && resource === 'resolve' && segments.length === 3) {
+    if (method === 'GET' && resource === 'addresses' && segments.length === 3) {
       const address = url.searchParams.get('address');
       if (!address) {
         throw new ApplicationError(400, 'invalid_address', 'address query parameter is required.');
@@ -171,15 +172,14 @@ export class IdentityController {
     throw new ApplicationError(404, 'not_found', 'Identity API endpoint not found.');
   }
 
-  private async sessionAction(
+  private async sessionRuntime(
     accountID: string,
     sessionID: string,
-    action: string,
     request: Request,
   ): Promise<Response> {
     const data = await RequestData.readJSON(request);
 
-    if (action === 'resume') {
+    if (request.method === 'PUT') {
       const resumeToken = RequestData.requiredString(data, 'resumeToken', 256);
       const runtimeLabel = RequestData.optionalString(data, 'runtimeLabel', 120);
 
@@ -190,11 +190,11 @@ export class IdentityController {
 
     const runtimeToken = RequestData.requiredString(data, 'runtimeToken', 256);
 
-    if (action === 'heartbeat') {
+    if (request.method === 'PATCH') {
       return ResponseData.ok(await this.services.identities.renew(accountID, sessionID, runtimeToken));
     }
 
-    if (action === 'release') {
+    if (request.method === 'DELETE') {
       return ResponseData.ok(await this.services.identities.release(accountID, sessionID, runtimeToken));
     }
 

@@ -38,12 +38,12 @@ describe('Organization identity lifecycle (real OAuth, Worker and D1)', () => {
       displayName: 'FFL 開發',
     });
 
-    const old = await client.call('GET', `/v2/account/resolve?address=${slug}/coder/ffl`, {
+    const old = await client.call('GET', `/v2/account/addresses?address=${slug}/coder/ffl`, {
       token: accessToken,
     });
     expect(old.status).toBe(404);
 
-    const current = await client.call('GET', `/v2/account/resolve?address=${slug}/developer`, {
+    const current = await client.call('GET', `/v2/account/addresses?address=${slug}/developer`, {
       token: accessToken,
     });
     expect(current.body.data.id).toBe(sessionID);
@@ -69,7 +69,7 @@ describe('Organization identity lifecycle (real OAuth, Worker and D1)', () => {
     const first = await client.createAgent(accessToken, 'robot', 'main');
     const agentID = first.body.data.session.agentId;
     const mainID = first.body.data.session.id;
-    const extra = await client.call('POST', `/v2/account/agents/${agentID}/sessions/claim`, {
+    const extra = await client.call('POST', `/v2/account/agents/${agentID}/session-runtime-leases`, {
       token: accessToken,
       body: { sessionName: 'research' },
     });
@@ -82,7 +82,7 @@ describe('Organization identity lifecycle (real OAuth, Worker and D1)', () => {
     expect(protectedDefault.status).toBe(409);
     expect(protectedDefault.body.error.code).toBe('default_session_required');
 
-    const setDefault = await client.call('PUT', `/v2/account/sessions/${extraID}/default`, {
+    const setDefault = await client.call('PUT', `/v2/account/sessions/${extraID}/default-selection`, {
       token: accessToken,
     });
     expect(setDefault.status).toBe(200);
@@ -93,7 +93,7 @@ describe('Organization identity lifecycle (real OAuth, Worker and D1)', () => {
     });
     expect(archivedMain.status).toBe(200);
 
-    const selected = await client.call('GET', `/v2/account/resolve?address=${slug}/robot`, {
+    const selected = await client.call('GET', `/v2/account/addresses?address=${slug}/robot`, {
       token: accessToken,
     });
     expect(selected.body.data.id).toBe(extraID);
@@ -106,13 +106,13 @@ describe('Organization identity lifecycle (real OAuth, Worker and D1)', () => {
     });
     expect(archivedAgent.status).toBe(200);
 
-    const oldLease = await client.call('POST', `/v2/account/sessions/${extraID}/heartbeat`, {
+    const oldLease = await client.call('PATCH', `/v2/account/sessions/${extraID}/runtime-lease`, {
       token: accessToken,
       body: { runtimeToken: extra.body.data.runtimeToken },
     });
     expect(oldLease.status).toBe(404);
 
-    const oldResume = await client.call('POST', `/v2/account/sessions/${extraID}/resume`, {
+    const oldResume = await client.call('PUT', `/v2/account/sessions/${extraID}/runtime-lease`, {
       token: accessToken,
       body: { resumeToken: extra.body.data.resumeToken },
     });
@@ -137,31 +137,31 @@ describe('Organization identity lifecycle (real OAuth, Worker and D1)', () => {
 
     const original = await client.createAgent(accessToken, 'testbot', 'main');
     const sessionID = original.body.data.session.id;
-    const rotated = await client.call('POST', `/v2/account/sessions/${sessionID}/rotate-resume`, {
+    const rotated = await client.call('PUT', `/v2/account/sessions/${sessionID}/resume-credential`, {
       token: accessToken,
     });
     expect(rotated.status).toBe(200);
     expect(rotated.body.data.resumeToken).not.toBe(original.body.data.resumeToken);
 
-    const active = await client.call('POST', `/v2/account/sessions/${sessionID}/heartbeat`, {
+    const active = await client.call('PATCH', `/v2/account/sessions/${sessionID}/runtime-lease`, {
       token: accessToken,
       body: { runtimeToken: original.body.data.runtimeToken },
     });
     expect(active.status).toBe(200);
 
-    const released = await client.call('POST', `/v2/account/sessions/${sessionID}/release`, {
+    const released = await client.call('DELETE', `/v2/account/sessions/${sessionID}/runtime-lease`, {
       token: accessToken,
       body: { runtimeToken: original.body.data.runtimeToken },
     });
     expect(released.status).toBe(200);
 
-    const outdated = await client.call('POST', `/v2/account/sessions/${sessionID}/resume`, {
+    const outdated = await client.call('PUT', `/v2/account/sessions/${sessionID}/runtime-lease`, {
       token: accessToken,
       body: { resumeToken: original.body.data.resumeToken },
     });
     expect(outdated.status).toBe(403);
 
-    const recovered = await client.call('POST', `/v2/account/sessions/${sessionID}/resume`, {
+    const recovered = await client.call('PUT', `/v2/account/sessions/${sessionID}/runtime-lease`, {
       token: accessToken,
       body: { resumeToken: rotated.body.data.resumeToken },
     });
@@ -183,8 +183,8 @@ describe('Organization identity lifecycle (real OAuth, Worker and D1)', () => {
       ['DELETE', `/v2/account/agents/${agentID}`, undefined],
       ['PATCH', `/v2/account/sessions/${sessionID}`, { sessionName: 'hijack' }],
       ['DELETE', `/v2/account/sessions/${sessionID}`, undefined],
-      ['PUT', `/v2/account/sessions/${sessionID}/default`, undefined],
-      ['POST', `/v2/account/sessions/${sessionID}/rotate-resume`, undefined],
+      ['PUT', `/v2/account/sessions/${sessionID}/default-selection`, undefined],
+      ['PUT', `/v2/account/sessions/${sessionID}/resume-credential`, undefined],
     ] as const) {
       const result = await client.call(method, path, { token: second.accessToken, body });
       expect(result.status).toBe(404);

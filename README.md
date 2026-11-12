@@ -58,21 +58,21 @@ All Account API routes require an OAuth access token: `Authorization: Bearer <to
 | PATCH | `/v2/account/organization` | Change Organization display name |
 | GET | `/v2/account/agents` | List Organization Agents |
 | POST | `/v2/account/agents` | Register Agent and Default Session without occupying a Runtime |
-| POST | `/v2/account/agents/claim` | Create Agent and Default Session with an active Runtime lease |
+| POST | `/v2/account/agent-runtime-leases` | Create Agent and Default Session with an active Runtime lease |
 | PATCH | `/v2/account/agents/{agentID}` | Update Agent handle or display name |
 | DELETE | `/v2/account/agents/{agentID}` | Archive Agent, all Sessions and their Runtime leases |
 | GET | `/v2/account/agents/{agentID}/sessions` | List Agent Sessions |
 | POST | `/v2/account/agents/{agentID}/sessions` | Register another Session without occupying a Runtime |
-| POST | `/v2/account/agents/{agentID}/sessions/claim` | Create another Session and acquire a Runtime lease |
+| POST | `/v2/account/agents/{agentID}/session-runtime-leases` | Create another Session and acquire a Runtime lease |
 | PATCH | `/v2/account/sessions/{sessionID}` | Update Session handle or display name |
-| PUT | `/v2/account/sessions/{sessionID}/default` | Set Agent's Default Session |
+| PUT | `/v2/account/sessions/{sessionID}/default-selection` | Set Agent's Default Session |
 | DELETE | `/v2/account/sessions/{sessionID}` | Archive a non-default Session and revoke its Runtime lease |
-| POST | `/v2/account/sessions/{sessionID}/rotate-resume` | Replace a lost Resume Token without changing the active Runtime |
+| PUT | `/v2/account/sessions/{sessionID}/resume-credential` | Replace a lost Resume Token without changing the active Runtime |
 | GET | `/v2/account/sessions/{sessionID}` | Read Session identity |
-| POST | `/v2/account/sessions/{sessionID}/resume` | Resume with `resumeToken`, when unoccupied |
-| POST | `/v2/account/sessions/{sessionID}/heartbeat` | Renew active Runtime with `runtimeToken` |
-| POST | `/v2/account/sessions/{sessionID}/release` | Release a Runtime's ownership |
-| GET | `/v2/account/resolve?address=...` | Resolve Agent shorthand or full canonical address |
+| PUT | `/v2/account/sessions/{sessionID}/runtime-lease` | Resume with `resumeToken`, when unoccupied |
+| PATCH | `/v2/account/sessions/{sessionID}/runtime-lease` | Renew active Runtime with `runtimeToken` |
+| DELETE | `/v2/account/sessions/{sessionID}/runtime-lease` | Release a Runtime's ownership |
+| GET | `/v2/account/addresses?address=...` | Resolve Agent shorthand or full canonical address |
 
 A new Agent request can specify `agentName`, `sessionName`, `agentDisplayName`, `sessionDisplayName`, and optional `runtimeLabel`. Omitted handles are generated. Registration returns a private `resumeToken` without claiming a Runtime. Claiming also returns a `runtimeToken` and lease expiration. These capabilities are issued once; store them privately. They are capabilities, not human-readable addresses.
 

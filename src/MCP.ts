@@ -212,7 +212,7 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
       },
       async ({ address }) => AddressMCP.textResult(
         await this.api.call<PublicSession>(
-          'GET', `/v2/account/resolve?address=${encodeURIComponent(address)}`,
+          'GET', `/v2/account/addresses?address=${encodeURIComponent(address)}`,
         ),
       ),
     );

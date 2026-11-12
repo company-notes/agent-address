@@ -16,6 +16,33 @@ describe('identity account API boundaries', () => {
     expect(unlinked.body.error.code).toBe('no_organization');
   });
 
+  it('accepts only resource-based Runtime claims and rejects retired action endpoints', async () => {
+    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
+    await client.registerOrganization(accessToken, TestClient.uniqueName('resources'));
+
+    const retiredClaim = await client.call('POST', '/v2/account/agents/claim', {
+      token: accessToken,
+      body: { agentName: 'obsolete' },
+    });
+    expect(retiredClaim.status).toBe(404);
+
+    const agent = await client.createAgent(accessToken, 'current', 'main');
+    expect(agent.status).toBe(201);
+
+    const sessionID = agent.body.data.session.id;
+    const oldLease = await client.call('POST', `/v2/account/sessions/${sessionID}/heartbeat`, {
+      token: accessToken,
+      body: { runtimeToken: agent.body.data.runtimeToken },
+    });
+    expect(oldLease.status).toBe(404);
+
+    const renewed = await client.call('PATCH', `/v2/account/sessions/${sessionID}/runtime-lease`, {
+      token: accessToken,
+      body: { runtimeToken: agent.body.data.runtimeToken },
+    });
+    expect(renewed.status).toBe(200);
+  });
+
   it('supports a named Agent with a default Session and additional Sessions', async () => {
     const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
     const slug = TestClient.uniqueName('team');
@@ -78,7 +105,7 @@ describe('identity account API boundaries', () => {
 
     const legacy = await client.call(
       'GET',
-      '/v2/account/resolve?address=' + encodeURIComponent(`${slug}/@robot/main`),
+      '/v2/account/addresses?address=' + encodeURIComponent(`${slug}/@robot/main`),
       { token: accessToken },
     );
     expect(legacy.status).toBe(400);
@@ -101,21 +128,21 @@ describe('identity account API boundaries', () => {
     const sessionID = registered.body.data.session.id;
     const resumeBody = { resumeToken: registered.body.data.resumeToken };
 
-    const first = await client.call('POST', `/v2/account/sessions/${sessionID}/resume`, {
+    const first = await client.call('PUT', `/v2/account/sessions/${sessionID}/runtime-lease`, {
       token: accessToken,
       body: resumeBody,
     });
     expect(first.status).toBe(200);
     expect(first.body.data.session.canonical).toBe(`${slug}/xiaoming/main`);
 
-    const second = await client.call('POST', `/v2/account/sessions/${sessionID}/resume`, {
+    const second = await client.call('PUT', `/v2/account/sessions/${sessionID}/runtime-lease`, {
       token: accessToken,
       body: resumeBody,
     });
     expect(second.status).toBe(409);
     expect(second.body.error.code).toBe('session_in_use');
 
-    const released = await client.call('POST', `/v2/account/sessions/${sessionID}/release`, {
+    const released = await client.call('DELETE', `/v2/account/sessions/${sessionID}/runtime-lease`, {
       token: accessToken,
       body: { runtimeToken: first.body.data.runtimeToken },
     });
@@ -137,7 +164,7 @@ describe('identity account API boundaries', () => {
     });
     expect(exposed.status).toBe(404);
 
-    const resume = await client.call('POST', `/v2/account/sessions/${sessionID}/resume`, {
+    const resume = await client.call('PUT', `/v2/account/sessions/${sessionID}/runtime-lease`, {
       token: foreign.accessToken,
       body: { resumeToken: agent.body.data.resumeToken },
     });
@@ -145,12 +172,12 @@ describe('identity account API boundaries', () => {
 
     const resolved = await client.call(
       'GET',
-      '/v2/account/resolve?address=' + encodeURIComponent(agent.body.data.session.canonical),
+      '/v2/account/addresses?address=' + encodeURIComponent(agent.body.data.session.canonical),
       { token: foreign.accessToken },
     );
     expect(resolved.status).toBe(403);
 
-    const invalidResume = await client.call('POST', `/v2/account/sessions/${sessionID}/resume`, {
+    const invalidResume = await client.call('PUT', `/v2/account/sessions/${sessionID}/runtime-lease`, {
       token: owner.accessToken,
       body: { resumeToken: 'resume_wrong' },
     });

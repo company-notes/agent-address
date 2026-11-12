@@ -46,7 +46,7 @@ export class TestClient {
   }
 
   async createAgent(token: string, agentName?: string, sessionName?: string): Promise<APIResult> {
-    return this.call('POST', '/v2/account/agents/claim', {
+    return this.call('POST', '/v2/account/agent-runtime-leases', {
       token,
       body: { agentName, sessionName },
     });
