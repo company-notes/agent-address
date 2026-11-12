@@ -120,7 +120,7 @@ try {
 
   await page.getByText(slug + '/xiaoming/main').waitFor({ timeout: 15000 });
   await page.getByRole('button', { name: 'Sessions' }).first().click();
-  await page.getByText('Default Session').waitFor();
+  await page.getByText('Default Session', { exact: true }).waitFor();
 
   await page.locator('#newSessionName').fill('ffl-dev');
   await page.getByRole('button', { name: 'Create Session' }).click();
