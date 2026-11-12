@@ -61,6 +61,7 @@ describe('real MCP client authenticates through OAuth and uses the shared API', 
       'agentAddressResumeSession',
       'agentAddressHeartbeatRuntime',
       'agentAddressReleaseRuntime',
+      'agentAddressForgetLocalSession',
       'agentAddressResolve',
       'agentAddressListAgents',
       'agentAddressListSessions',
@@ -94,6 +95,62 @@ describe('real MCP client authenticates through OAuth and uses the shared API', 
 
     const released = await session.call('agentAddressReleaseRuntime');
     expect(released.data.released).toBe(true);
+
+    await session.close();
+  });
+
+  it('resumes an existing Session by its complete canonical address after release', async () => {
+    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
+    const slug = TestClient.uniqueName('resume');
+    const api = new TestClient();
+    await api.registerOrganization(accessToken, slug);
+    const session = await MCPTestSession.connect(accessToken);
+
+    const first = await session.call('agentAddressClaimAgent', {
+      agentName: 'coder',
+      sessionName: 'ffl-dev',
+    });
+    expect(first.isError).toBe(false);
+    await session.call('agentAddressReleaseRuntime');
+
+    const resumed = await session.call('agentAddressResumeSession', {
+      address: `${slug}/coder/ffl-dev`,
+      resumeToken: first.data.resumeToken,
+    });
+    expect(resumed.isError).toBe(false);
+    expect(resumed.data.session.id).toBe(first.data.session.id);
+
+    await session.call('agentAddressReleaseRuntime');
+    await session.close();
+  });
+
+  it('recovers when the Portal archives the current Agent during an active MCP connection', async () => {
+    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
+    const api = new TestClient();
+    await api.registerOrganization(accessToken, TestClient.uniqueName('revoked'));
+    const session = await MCPTestSession.connect(accessToken);
+
+    const original = await session.call('agentAddressClaimAgent', {
+      agentName: 'old-agent',
+      sessionName: 'main',
+    });
+    expect(original.isError).toBe(false);
+
+    const archived = await api.call('DELETE', `/v2/account/agents/${original.data.session.agentId}`, {
+      token: accessToken,
+    });
+    expect(archived.status).toBe(200);
+
+    const stale = await session.call('agentAddressHeartbeatRuntime');
+    expect(stale.isError).toBe(true);
+
+    const cleared = await session.call('agentAddressForgetLocalSession');
+    expect(cleared.isError).toBe(false);
+    expect(cleared.data.detached).toBe(true);
+
+    const next = await session.call('agentAddressClaimAgent', { agentName: 'new-agent' });
+    expect(next.isError).toBe(false);
+    expect(next.data.session.agentId).not.toBe(original.data.session.agentId);
 
     await session.close();
   });
