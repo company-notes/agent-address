@@ -45,6 +45,7 @@ CREATE INDEX idx_sessions_agent ON agent_sessions(agent_id);
 CREATE TABLE session_runtime_leases (
   session_id TEXT PRIMARY KEY,
   runtime_token_hash TEXT NOT NULL UNIQUE,
+  runtime_label TEXT,
   refreshed_at TEXT NOT NULL,
   expires_at TEXT NOT NULL,
   FOREIGN KEY (session_id) REFERENCES agent_sessions(id) ON DELETE CASCADE
