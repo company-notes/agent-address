@@ -162,7 +162,9 @@ export function PortalApp() {
     await action(async () => {
       const updated = await PortalAPI.updateSession(sessionID, changes);
       setEditing(null);
+
       setSessions(await PortalAPI.sessions(updated.agentId));
+
       await refresh();
     });
   }

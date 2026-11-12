@@ -231,6 +231,7 @@ export class IdentityService {
 
     const resumeToken = TokenService.randomToken('resume');
     const resumeHash = await TokenService.sha256Hex(resumeToken);
+
     const createdAt = new Date().toISOString();
 
     const statement = this.db.prepare(
@@ -417,6 +418,7 @@ export class IdentityService {
 
     return IdentityService.publicSession(org.slug, session);
   }
+
   async updateAgent(accountID: string, agentID: string, changes: AgentChanges): Promise<AgentRow> {
     const org = await this.organization(accountID);
     const original = await this.requireAgent(org.id, agentID);

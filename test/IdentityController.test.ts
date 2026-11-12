@@ -157,5 +157,4 @@ describe('identity account API boundaries', () => {
     expect(invalidResume.status).toBe(403);
   });
 
-
 });

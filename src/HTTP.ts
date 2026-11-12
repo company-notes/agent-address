@@ -3,7 +3,6 @@ import { ApplicationError } from './ApplicationError';
 export type JSONRecord = Record<string, unknown>;
 
 export class RequestData {
-
   static bearerToken(request: Request, errorMessage = 'Bearer token required.'): string {
     const authorization = request.headers.get('authorization') ?? '';
     const match = authorization.match(/^Bearer\s+(.+)$/i);
@@ -66,8 +65,6 @@ export class RequestData {
 
     return result || null;
   }
-
-
 }
 
 export class ResponseData {
