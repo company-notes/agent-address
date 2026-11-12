@@ -65,6 +65,7 @@ try {
   ], {
     cwd: root,
     env: environment,
+    detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
@@ -133,7 +134,10 @@ try {
     await browser.close();
   }
 
-  if (worker) {
-    worker.kill('SIGTERM');
+  if (worker?.pid) {
+    // Wrangler starts workerd as a child. Stop the whole isolated CI process group.
+    process.kill(-worker.pid, 'SIGTERM');
+    worker.stdout.destroy();
+    worker.stderr.destroy();
   }
 }
