@@ -109,7 +109,7 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
       async (input) => {
         await this.assertUnclaimed();
 
-        const result = await this.api.call<ClaimedIdentity>('POST', '/v2/account/agents', input);
+        const result = await this.api.call<ClaimedIdentity>('POST', '/v2/account/agents/claim', input);
         await this.rememberIdentity(result.session.id, result.runtimeToken);
 
         return AddressMCP.textResult(result);
@@ -134,7 +134,7 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
 
         const created = await this.api.call<ClaimedIdentity>(
           'POST',
-          `/v2/account/agents/${encodeURIComponent(agentID)}/sessions`,
+          `/v2/account/agents/${encodeURIComponent(agentID)}/sessions/claim`,
           input,
         );
         await this.rememberIdentity(created.session.id, created.runtimeToken);

@@ -1,7 +1,7 @@
 import { Alert, Button, Card, Col, Divider, Form, Input, Layout, List, Row, Space, Spin, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 
-import { Agent, IdentityClaim, PortalAPI, AccountStatus, Session } from './PortalAPI';
+import { Agent, IdentityRegistration, PortalAPI, AccountStatus, Session } from './PortalAPI';
 import { PortalOAuth } from './PortalOAuth';
 
 export function PortalApp() {
@@ -10,7 +10,7 @@ export function PortalApp() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [claim, setClaim] = useState<IdentityClaim | null>(null);
+  const [claim, setClaim] = useState<IdentityRegistration | null>(null);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -227,9 +227,8 @@ export function PortalApp() {
                       message={'Created ' + claim.session.canonical}
                       description={
                         <div>
-                          <p>Save these one-time secrets securely for this Session's Runtime.</p>
+                          <p>Save this one-time resume capability securely. A Runtime may use it to acquire the Session.</p>
                           <p>Resume token: <code>{claim.resumeToken}</code></p>
-                          <p>Runtime token: <code>{claim.runtimeToken}</code></p>
                         </div>
                       }
                     />

@@ -17,7 +17,7 @@ describe('Admin accounts, Agents and Sessions (real D1)', () => {
     const account = await services.accounts.signUp(email, 'long-password-123', TestClient.REGISTRATION_KEY);
     const slug = TestClient.uniqueName('company');
     await services.organizations.register(account.id, slug, 'Team');
-    const claimed = await services.identities.createAgent(account.id, {
+    const claimed = await services.identities.claimAgent(account.id, {
       agentName: 'releasebot',
       sessionName: 'main',
     });

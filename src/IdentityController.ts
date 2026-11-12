@@ -50,6 +50,30 @@ export class IdentityController {
       return ResponseData.ok(await this.services.organizations.register(accountID, slug, displayName), 201);
     }
 
+    if (method === 'POST' && resource === 'agents' && identifier === 'claim' &&
+        segments.length === 4) {
+      const data = await RequestData.readJSON(request);
+
+      return ResponseData.ok(
+        await this.services.identities.claimAgent(accountID, IdentityController.newAgentInput(data)),
+        201,
+      );
+    }
+
+    if (resource === 'agents' && identifier && action === 'sessions' &&
+        segments[5] === 'claim' && segments.length === 6 && method === 'POST') {
+      const data = await RequestData.readJSON(request);
+
+      return ResponseData.ok(
+        await this.services.identities.claimSession(
+          accountID,
+          identifier,
+          IdentityController.newSessionInput(data),
+        ),
+        201,
+      );
+    }
+
     if (resource === 'agents' && segments.length === 3) {
       if (method === 'GET') {
         return ResponseData.ok(await this.services.identities.listAgents(accountID));
@@ -59,7 +83,7 @@ export class IdentityController {
         const data = await RequestData.readJSON(request);
         const input = IdentityController.newAgentInput(data);
 
-        return ResponseData.ok(await this.services.identities.createAgent(accountID, input), 201);
+        return ResponseData.ok(await this.services.identities.registerAgent(accountID, input), 201);
       }
     }
 
@@ -72,7 +96,7 @@ export class IdentityController {
         const data = await RequestData.readJSON(request);
         const input = IdentityController.newSessionInput(data);
 
-        return ResponseData.ok(await this.services.identities.createSession(accountID, identifier, input), 201);
+        return ResponseData.ok(await this.services.identities.registerSession(accountID, identifier, input), 201);
       }
     }
 

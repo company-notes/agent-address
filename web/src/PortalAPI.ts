@@ -28,11 +28,9 @@ export type Session = {
   isDefault: boolean;
 };
 
-export type IdentityClaim = {
+export type IdentityRegistration = {
   session: Session;
   resumeToken: string;
-  runtimeToken: string;
-  leaseExpiresAt: string;
 };
 
 type APIResult<T> =
@@ -77,7 +75,7 @@ export class PortalAPI {
     return this.request('GET', '/agents');
   }
 
-  static createAgent(agentName: string, sessionName: string): Promise<IdentityClaim> {
+  static createAgent(agentName: string, sessionName: string): Promise<IdentityRegistration> {
     return this.request('POST', '/agents', {
       ...(agentName ? { agentName } : {}),
       ...(sessionName ? { sessionName } : {}),
@@ -88,7 +86,7 @@ export class PortalAPI {
     return this.request('GET', '/agents/' + encodeURIComponent(agentID) + '/sessions');
   }
 
-  static createSession(agentID: string, sessionName: string): Promise<IdentityClaim> {
+  static createSession(agentID: string, sessionName: string): Promise<IdentityRegistration> {
     return this.request('POST', '/agents/' + encodeURIComponent(agentID) + '/sessions', {
       ...(sessionName ? { sessionName } : {}),
     });
