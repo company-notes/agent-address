@@ -106,6 +106,7 @@ export class OAuthTestFlow {
     const fields: Record<string, string> = { intent, email, password };
     if (intent === 'signup') {
       fields.registrationKey = TestClient.REGISTRATION_KEY;
+      fields.passwordConfirmation = password;
     }
     return this.exchangeCode(await this.submitLogin(fields, oauthRequest));
   }
