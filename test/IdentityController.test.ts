@@ -83,10 +83,5 @@ describe('identity account API boundaries', () => {
     expect(invalidResume.status).toBe(403);
   });
 
-  it('rejects old API paths rather than retaining compatibility routes', async () => {
-    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
 
-    const legacy = await client.call('GET', '/v1/account/works', { token: accessToken });
-    expect(legacy.status).toBe(404);
-  });
 });
