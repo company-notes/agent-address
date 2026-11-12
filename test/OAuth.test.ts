@@ -121,7 +121,7 @@ describe('OAuth', () => {
     const { oauthRequest } = await flow.openLoginPage();
 
     const response = await flow.submitLogin(
-      { intent: 'signup', email: `${TestClient.uniqueName('user')}@example.com`, password },
+      { intent: 'signup', email: `${TestClient.uniqueName('user')}@example.com`, password, passwordConfirmation: password },
       oauthRequest,
     );
     expect(response.status).toBe(400);
