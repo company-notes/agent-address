@@ -119,7 +119,7 @@ try {
   await page.locator('#sessionName').fill('main');
   await page.getByRole('button', { name: 'Create Agent' }).click();
 
-  await page.getByText(slug + '/xiaoming/main').waitFor({ timeout: 15000 });
+  await page.getByText(slug + '/xiaoming/main', { exact: true }).waitFor({ timeout: 15000 });
   await page.getByRole('button', { name: 'Sessions' }).first().click();
   await page.getByText('Default Session', { exact: true }).waitFor();
 
