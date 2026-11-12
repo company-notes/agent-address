@@ -92,6 +92,10 @@ try {
     await sleep(250);
   }
 
+  const home = await fetch(origin + '/', { redirect: 'manual' });
+  assert.equal(home.status, 302, 'Home must lead users to Organization Portal');
+  assert.equal(home.headers.get('location'), origin + '/portal/');
+
   browser = await chromium.launch({ headless: true, channel: 'chrome' });
   const page = await browser.newPage();
   const pageErrors = [];
