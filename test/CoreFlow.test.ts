@@ -42,33 +42,33 @@ describe('core Organization Agent Session scenario (real OAuth, Worker, D1)', ()
       expect.objectContaining({ id: mac.body.data.session.agentId }),
     ]));
 
-    const full = await client.call('GET', '/v2/account/resolve?address=' +
+    const full = await client.call('GET', '/v2/account/addresses?address=' +
       encodeURIComponent(windows.body.data.session.canonical), { token: accessToken });
     expect(full.status).toBe(200);
     expect(full.body.data.id).toBe(windows.body.data.session.id);
 
     const agentAddress = `${slug}/${windows.body.data.session.agentHandle}`;
-    const defaultResolved = await client.call('GET', '/v2/account/resolve?address=' +
+    const defaultResolved = await client.call('GET', '/v2/account/addresses?address=' +
       encodeURIComponent(agentAddress), { token: accessToken });
     expect(defaultResolved.body.data.id).toBe(windows.body.data.session.id);
 
     const sessionID = windows.body.data.session.id;
     const resumeBody = { resumeToken: windows.body.data.resumeToken, runtimeLabel: 'mac' };
 
-    const conflicted = await client.call('POST', `/v2/account/sessions/${sessionID}/resume`, {
+    const conflicted = await client.call('PUT', `/v2/account/sessions/${sessionID}/runtime-lease`, {
       token: accessToken,
       body: resumeBody,
     });
     expect(conflicted.status).toBe(409);
     expect(conflicted.body.error.code).toBe('session_in_use');
 
-    const released = await client.call('POST', `/v2/account/sessions/${sessionID}/release`, {
+    const released = await client.call('DELETE', `/v2/account/sessions/${sessionID}/runtime-lease`, {
       token: accessToken,
       body: { runtimeToken: windows.body.data.runtimeToken },
     });
     expect(released.status).toBe(200);
 
-    const resumed = await client.call('POST', `/v2/account/sessions/${sessionID}/resume`, {
+    const resumed = await client.call('PUT', `/v2/account/sessions/${sessionID}/runtime-lease`, {
       token: accessToken,
       body: resumeBody,
     });
@@ -76,13 +76,13 @@ describe('core Organization Agent Session scenario (real OAuth, Worker, D1)', ()
     expect(resumed.body.data.session.canonical).toBe(windows.body.data.session.canonical);
     expect(resumed.body.data.runtimeToken).not.toBe(windows.body.data.runtimeToken);
 
-    const formerOwner = await client.call('POST', `/v2/account/sessions/${sessionID}/heartbeat`, {
+    const formerOwner = await client.call('PATCH', `/v2/account/sessions/${sessionID}/runtime-lease`, {
       token: accessToken,
       body: { runtimeToken: windows.body.data.runtimeToken },
     });
     expect(formerOwner.status).toBe(409);
 
-    const heartbeat = await client.call('POST', `/v2/account/sessions/${sessionID}/heartbeat`, {
+    const heartbeat = await client.call('PATCH', `/v2/account/sessions/${sessionID}/runtime-lease`, {
       token: accessToken,
       body: { runtimeToken: resumed.body.data.runtimeToken },
     });

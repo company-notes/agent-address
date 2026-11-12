@@ -78,7 +78,7 @@ describe('identity account API boundaries', () => {
 
     const legacy = await client.call(
       'GET',
-      '/v2/account/resolve?address=' + encodeURIComponent(`${slug}/@robot/main`),
+      '/v2/account/addresses?address=' + encodeURIComponent(`${slug}/@robot/main`),
       { token: accessToken },
     );
     expect(legacy.status).toBe(400);
@@ -101,21 +101,21 @@ describe('identity account API boundaries', () => {
     const sessionID = registered.body.data.session.id;
     const resumeBody = { resumeToken: registered.body.data.resumeToken };
 
-    const first = await client.call('POST', `/v2/account/sessions/${sessionID}/resume`, {
+    const first = await client.call('PUT', `/v2/account/sessions/${sessionID}/runtime-lease`, {
       token: accessToken,
       body: resumeBody,
     });
     expect(first.status).toBe(200);
     expect(first.body.data.session.canonical).toBe(`${slug}/xiaoming/main`);
 
-    const second = await client.call('POST', `/v2/account/sessions/${sessionID}/resume`, {
+    const second = await client.call('PUT', `/v2/account/sessions/${sessionID}/runtime-lease`, {
       token: accessToken,
       body: resumeBody,
     });
     expect(second.status).toBe(409);
     expect(second.body.error.code).toBe('session_in_use');
 
-    const released = await client.call('POST', `/v2/account/sessions/${sessionID}/release`, {
+    const released = await client.call('DELETE', `/v2/account/sessions/${sessionID}/runtime-lease`, {
       token: accessToken,
       body: { runtimeToken: first.body.data.runtimeToken },
     });
@@ -137,7 +137,7 @@ describe('identity account API boundaries', () => {
     });
     expect(exposed.status).toBe(404);
 
-    const resume = await client.call('POST', `/v2/account/sessions/${sessionID}/resume`, {
+    const resume = await client.call('PUT', `/v2/account/sessions/${sessionID}/runtime-lease`, {
       token: foreign.accessToken,
       body: { resumeToken: agent.body.data.resumeToken },
     });
@@ -145,12 +145,12 @@ describe('identity account API boundaries', () => {
 
     const resolved = await client.call(
       'GET',
-      '/v2/account/resolve?address=' + encodeURIComponent(agent.body.data.session.canonical),
+      '/v2/account/addresses?address=' + encodeURIComponent(agent.body.data.session.canonical),
       { token: foreign.accessToken },
     );
     expect(resolved.status).toBe(403);
 
-    const invalidResume = await client.call('POST', `/v2/account/sessions/${sessionID}/resume`, {
+    const invalidResume = await client.call('PUT', `/v2/account/sessions/${sessionID}/runtime-lease`, {
       token: owner.accessToken,
       body: { resumeToken: 'resume_wrong' },
     });

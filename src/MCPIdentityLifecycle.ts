@@ -90,7 +90,7 @@ export class MCPIdentityLifecycle {
     }
 
     const claimed = await this.api.call<ClaimedIdentity>(
-      'POST', '/v2/account/agents/claim', input,
+      'POST', '/v2/account/agent-runtime-leases', input,
     );
     await this.remember(claimed.session.id, claimed.runtimeToken, claimed.resumeToken);
 
@@ -106,7 +106,7 @@ export class MCPIdentityLifecycle {
 
     const claimed = await this.api.call<ClaimedIdentity>(
       'POST',
-      `/v2/account/agents/${encodeURIComponent(agentID)}/sessions/claim`,
+      `/v2/account/agents/${encodeURIComponent(agentID)}/session-runtime-leases`,
       input,
     );
     await this.remember(claimed.session.id, claimed.runtimeToken, claimed.resumeToken);
@@ -126,7 +126,7 @@ export class MCPIdentityLifecycle {
       }
 
       const lease = await this.api.call<{ expiresAt: string }>(
-        'POST', `/v2/account/sessions/${encodeURIComponent(saved.sessionID)}/heartbeat`,
+        'PATCH', `/v2/account/sessions/${encodeURIComponent(saved.sessionID)}/runtime-lease`,
         { runtimeToken: saved.runtimeToken },
       );
 
@@ -134,7 +134,7 @@ export class MCPIdentityLifecycle {
     }
 
     const resumed = await this.api.call<ResumedIdentity>(
-      'POST', `/v2/account/sessions/${encodeURIComponent(saved.sessionID)}/resume`,
+      'PUT', `/v2/account/sessions/${encodeURIComponent(saved.sessionID)}/runtime-lease`,
       { resumeToken: saved.resumeToken },
     );
     await this.remember(saved.sessionID, resumed.runtimeToken, saved.resumeToken);
@@ -181,7 +181,7 @@ export class MCPIdentityLifecycle {
     }
 
     return this.api.call<{ expiresAt: string }>(
-      'POST', `/v2/account/sessions/${encodeURIComponent(saved.sessionID)}/heartbeat`,
+      'PATCH', `/v2/account/sessions/${encodeURIComponent(saved.sessionID)}/runtime-lease`,
       { runtimeToken: saved.runtimeToken },
     );
   }
@@ -194,7 +194,7 @@ export class MCPIdentityLifecycle {
     }
 
     const session = await this.api.call<PublicSession>(
-      'POST', `/v2/account/sessions/${encodeURIComponent(saved.sessionID)}/release`,
+      'DELETE', `/v2/account/sessions/${encodeURIComponent(saved.sessionID)}/runtime-lease`,
       { runtimeToken: saved.runtimeToken },
     );
     await this.storage.delete(MCPIdentityLifecycle.RUNTIME_KEY);
