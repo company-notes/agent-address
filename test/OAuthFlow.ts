@@ -100,6 +100,32 @@ export class OAuthTestFlow {
     return { accessToken: tokens.access_token, refreshToken: tokens.refresh_token };
   }
 
+  async refresh(refreshToken: string): Promise<OAuthTokens> {
+    if (!this.clientId) {
+      throw new Error('Register the OAuth client before exchanging a refresh token.');
+    }
+
+    const response = await OAuthTestFlow.fetch('/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+        client_id: this.clientId,
+      }),
+    });
+    const tokens = (await response.json()) as {
+      access_token?: string;
+      refresh_token?: string;
+    };
+
+    if (!response.ok || !tokens.access_token) {
+      throw new Error('OAuth refresh did not return a valid access token.');
+    }
+
+    return { accessToken: tokens.access_token, refreshToken: tokens.refresh_token };
+  }
+
   async authorizeAccount(intent: 'signin' | 'signup', email: string, password: string): Promise<OAuthTokens> {
     await this.registerClient();
     const { oauthRequest } = await this.openLoginPage();
