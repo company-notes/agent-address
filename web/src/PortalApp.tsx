@@ -196,16 +196,16 @@ export function PortalApp() {
                             />
 
                             <Divider />
-                            <Form layout="vertical" onFinish={(values: { sessionName?: string }) =>
+                            <Form layout="vertical" onFinish={(values: { newSessionName?: string }) =>
                               void action(async () => {
                                 setClaim(await PortalAPI.createSession(
                                   selectedAgent.id,
-                                  values.sessionName?.trim() ?? '',
+                                  values.newSessionName?.trim() ?? '',
                                 ));
                                 setSessions(await PortalAPI.sessions(selectedAgent.id));
                               })}
                             >
-                              <Form.Item name="sessionName" label="New Session handle (optional)">
+                              <Form.Item name="newSessionName" label="New Session handle (optional)">
                                 <Input placeholder="ffl-dev" />
                               </Form.Item>
                               <Button htmlType="submit" loading={working}>Create Session</Button>
