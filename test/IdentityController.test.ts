@@ -48,6 +48,43 @@ describe('identity account API boundaries', () => {
     expect(duplicate.body.error.code).toBe('identity_name_taken');
   });
 
+  it('registers an Agent from Portal without occupying its Session, then allows only one Runtime', async () => {
+    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
+    const slug = TestClient.uniqueName('portal');
+    await client.registerOrganization(accessToken, slug);
+
+    const registered = await client.call('POST', '/v2/account/agents', {
+      token: accessToken,
+      body: { agentName: 'xiaoming', sessionName: 'main' },
+    });
+    expect(registered.status).toBe(201);
+    expect(registered.body.data.session.canonical).toBe(`${slug}/xiaoming/main`);
+    expect(registered.body.data.runtimeToken).toBeUndefined();
+
+    const sessionID = registered.body.data.session.id;
+    const resumeBody = { resumeToken: registered.body.data.resumeToken };
+
+    const first = await client.call('POST', `/v2/account/sessions/${sessionID}/resume`, {
+      token: accessToken,
+      body: resumeBody,
+    });
+    expect(first.status).toBe(200);
+    expect(first.body.data.session.canonical).toBe(`${slug}/xiaoming/main`);
+
+    const second = await client.call('POST', `/v2/account/sessions/${sessionID}/resume`, {
+      token: accessToken,
+      body: resumeBody,
+    });
+    expect(second.status).toBe(409);
+    expect(second.body.error.code).toBe('session_in_use');
+
+    const released = await client.call('POST', `/v2/account/sessions/${sessionID}/release`, {
+      token: accessToken,
+      body: { runtimeToken: first.body.data.runtimeToken },
+    });
+    expect(released.status).toBe(200);
+  });
+
   it('prevents cross-organization reads and resume even with a correct address', async () => {
     const owner = await OAuthTestFlow.signUpAndGetToken();
     const foreign = await OAuthTestFlow.signUpAndGetToken();
