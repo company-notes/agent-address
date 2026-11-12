@@ -17,7 +17,7 @@ type Page<T> = {
 };
 
 export class AdminDataProvider {
-  static readonly BASE_URL = '/v1/admin';
+  static readonly BASE_URL = '/admin/api';
 
   private static searchValue(filters?: CrudFilters): string {
     const filter = filters?.find((item) => 'field' in item && item.field === 'search');

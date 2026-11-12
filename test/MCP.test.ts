@@ -9,15 +9,20 @@ import { OAuthTestFlow } from './OAuthFlow';
 type ToolResult = { isError: boolean; text: string; data: any };
 
 class MCPTestSession {
-  private readonly client = new Client({ name: 'test', version: '1.0.0' });
+  private readonly client = new Client({ name: 'identity-flow', version: '1.0.0' });
 
   static async connect(accessToken: string): Promise<MCPTestSession> {
     const session = new MCPTestSession();
-    const transport = new StreamableHTTPClientTransport(new URL(`${TestClient.ORIGIN}/mcp`), {
-      requestInit: { headers: { authorization: `Bearer ${accessToken}` } },
-      fetch: (input, init) => exports.default.fetch(new Request(input as string | URL, init)),
-    });
+    const transport = new StreamableHTTPClientTransport(
+      new URL(`${TestClient.ORIGIN}/mcp`),
+      {
+        requestInit: { headers: { authorization: `Bearer ${accessToken}` } },
+        fetch: (input, init) => exports.default.fetch(new Request(input as string | URL, init)),
+      },
+    );
+
     await session.client.connect(transport);
+
     return session;
   }
 
@@ -25,136 +30,221 @@ class MCPTestSession {
     return (await this.client.listTools()).tools.map((tool) => tool.name);
   }
 
-  async call(name: string, args: Record<string, unknown> = {}): Promise<ToolResult> {
-    const result = await this.client.callTool({ name, arguments: args });
-    const text = (result.content as { text: string }[])[0].text;
-    let data: unknown = null;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = null;
-    }
-    return { isError: Boolean(result.isError), text, data };
+  async listToolDefinitions() {
+    return (await this.client.listTools()).tools;
   }
 
-  close(): Promise<void> {
-    return this.client.close();
+  async call(name: string, args: Record<string, unknown> = {}): Promise<ToolResult> {
+    const response = await this.client.callTool({ name, arguments: args });
+    const text = (response.content as { text: string }[])[0].text;
+    const isError = Boolean(response.isError);
+
+    return {
+      isError,
+      text,
+      data: isError ? null : JSON.parse(text),
+    };
+  }
+
+  async close(): Promise<void> {
+    await this.client.close();
   }
 }
 
-describe('remote MCP over OAuth', () => {
-  it('exposes the session naming tools to an authenticated account', async () => {
+describe('real MCP client authenticates through OAuth and uses the shared API', () => {
+  it('registers an Organization, claims a named Agent and resolves the default Session', async () => {
     const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
     const session = await MCPTestSession.connect(accessToken);
-    expect(await session.listToolNames()).toEqual(
-      expect.arrayContaining([
-        'agentAddressGetStatus',
-        'agentAddressClaimWork',
-        'agentAddressRenameWork',
-        'agentAddressReleaseWork',
-        'agentAddressResolve',
-        'agentAddressInstallLocal',
-      ]),
-    );
-    await session.close();
-  });
+    const slug = TestClient.uniqueName('mcp');
 
-  it('registers the organization and names the session in one call', async () => {
-    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
-    const session = await MCPTestSession.connect(accessToken);
-    const slug = TestClient.uniqueName('org');
+    expect(await session.listToolNames()).toEqual(expect.arrayContaining([
+      'agentAddressEnsureIdentity',
+      'agentAddressGetStatus',
+      'agentAddressRegisterOrganization',
+      'agentAddressClaimAgent',
+      'agentAddressCreateSession',
+      'agentAddressResumeSession',
+      'agentAddressHeartbeatRuntime',
+      'agentAddressReleaseRuntime',
+      'agentAddressForgetLocalSession',
+      'agentAddressResolve',
+      'agentAddressListAgents',
+      'agentAddressListSessions',
+    ]));
 
-    const before = await session.call('agentAddressGetStatus');
-    expect(before.data.organization).toBeNull();
+    const original = await session.call('agentAddressGetStatus');
+    expect(original.data.organization).toBeNull();
 
-    const claimed = await session.call('agentAddressClaimWork', { organization: slug, host: 'mypc', handle: 'build-release' });
+    const organization = await session.call('agentAddressRegisterOrganization', { slug, displayName: 'Team' });
+    expect(organization.isError).toBe(false);
+
+    const claimed = await session.call('agentAddressClaimAgent', {
+      agentName: 'xiaoming',
+      sessionName: 'main',
+    });
     expect(claimed.isError).toBe(false);
-    expect(claimed.data.message).toBe(`This session is now ${slug}/@mypc/build-release.`);
+    expect(claimed.data.session.canonical).toBe(`${slug}/xiaoming/main`);
 
     const status = await session.call('agentAddressGetStatus');
-    expect(status.data.organization.slug).toBe(slug);
-    expect(status.data.work.address).toBe('@mypc/build-release');
+    expect(status.data.session.canonical).toBe(`${slug}/xiaoming/main`);
+
+    const resolved = await session.call('agentAddressResolve', { address: `${slug}/xiaoming` });
+    expect(resolved.data.id).toBe(claimed.data.session.id);
+
+    const renewed = await session.call('agentAddressHeartbeatRuntime');
+    expect(renewed.isError).toBe(false);
+    expect(renewed.data.expiresAt).toBeTruthy();
+
+    const duplicate = await session.call('agentAddressClaimAgent', { agentName: 'other' });
+    expect(duplicate.isError).toBe(true);
+
+    const released = await session.call('agentAddressReleaseRuntime');
+    expect(released.data.released).toBe(true);
 
     await session.close();
   });
 
-  it('assigns a temporary name and never needs the organization again', async () => {
+  it('resumes an existing Session by its complete canonical address after release', async () => {
+    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
+    const slug = TestClient.uniqueName('resume');
+    const api = new TestClient();
+    await api.registerOrganization(accessToken, slug);
+    const session = await MCPTestSession.connect(accessToken);
+
+    const first = await session.call('agentAddressClaimAgent', {
+      agentName: 'coder',
+      sessionName: 'ffl-dev',
+    });
+    expect(first.isError).toBe(false);
+    await session.call('agentAddressReleaseRuntime');
+
+    const resumed = await session.call('agentAddressResumeSession');
+    expect(resumed.isError).toBe(false);
+    expect(resumed.data.session.id).toBe(first.data.session.id);
+    expect(resumed.text).not.toMatch(/runtimeToken|resumeToken|runtime_|resume_/);
+
+    await session.call('agentAddressReleaseRuntime');
+    await session.close();
+  });
+
+  it('recovers when the Portal archives the current Agent during an active MCP connection', async () => {
+    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
+    const api = new TestClient();
+    await api.registerOrganization(accessToken, TestClient.uniqueName('revoked'));
+    const session = await MCPTestSession.connect(accessToken);
+
+    const original = await session.call('agentAddressClaimAgent', {
+      agentName: 'old-agent',
+      sessionName: 'main',
+    });
+    expect(original.isError).toBe(false);
+
+    const archived = await api.call('DELETE', `/v2/account/agents/${original.data.session.agentId}`, {
+      token: accessToken,
+    });
+    expect(archived.status).toBe(200);
+
+    const stale = await session.call('agentAddressHeartbeatRuntime');
+    expect(stale.isError).toBe(true);
+
+    const cleared = await session.call('agentAddressForgetLocalSession');
+    expect(cleared.isError).toBe(false);
+    expect(cleared.data.detached).toBe(true);
+
+    const next = await session.call('agentAddressClaimAgent', { agentName: 'new-agent' });
+    expect(next.isError).toBe(false);
+    expect(next.data.session.agentId).not.toBe(original.data.session.agentId);
+
+    await session.close();
+  });
+
+  it('provides distinct Agent identities for independent runtime connections', async () => {
+    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
+    const client = new TestClient();
+    const slug = TestClient.uniqueName('distinct');
+    await client.registerOrganization(accessToken, slug);
+
+    const first = await MCPTestSession.connect(accessToken);
+    const second = await MCPTestSession.connect(accessToken);
+    const a = await first.call('agentAddressClaimAgent', { sessionName: 'ffl-dev' });
+    const b = await second.call('agentAddressClaimAgent', { sessionName: 'ffl-dev-mac' });
+
+    expect(a.data.session.agentId).not.toBe(b.data.session.agentId);
+    expect(a.data.session.canonical).toMatch(new RegExp(`^${slug}/agent-[a-f0-9]{8}/ffl-dev$`));
+    expect(b.data.session.canonical).toContain('/ffl-dev-mac');
+
+    await first.close();
+    await second.close();
+  });
+  it('auto-claims a persona address after OAuth without prompting for Organization or secrets', async () => {
+    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
+    const session = await MCPTestSession.connect(accessToken);
+
+    const created = await session.call('agentAddressEnsureIdentity', {
+      agentDisplayName: '小晴',
+    });
+
+    expect(created.isError).toBe(false);
+    expect(created.data.session.canonical).toMatch(
+      /^personal-[a-f0-9]{12}\/agent-[a-f0-9]{8}\/main$/,
+    );
+    expect(created.text).not.toMatch(/runtimeToken|resumeToken|runtime_|resume_/);
+    expect(created.data.created).toBe(true);
+
+    const again = await session.call('agentAddressEnsureIdentity');
+
+    expect(again.isError).toBe(false);
+    expect(again.data.created).toBe(false);
+    expect(again.data.session.id).toBe(created.data.session.id);
+    expect(again.data.session.canonical).toBe(created.data.session.canonical);
+
+    const agents = await session.call('agentAddressListAgents');
+    expect(agents.data).toHaveLength(1);
+    expect(agents.data[0].displayName).toBe('小晴');
+
+    const released = await session.call('agentAddressReleaseRuntime');
+    expect(released.isError).toBe(false);
+
+    const restored = await session.call('agentAddressEnsureIdentity');
+    expect(restored.isError).toBe(false);
+    expect(restored.data.session.id).toBe(created.data.session.id);
+    expect(restored.data.session.canonical).toBe(created.data.session.canonical);
+    expect(restored.text).not.toMatch(/runtimeToken|resumeToken|runtime_|resume_/);
+
+    await session.close();
+  });
+
+  it('keeps independent Agent installations separate under the same OAuth Account', async () => {
     const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
     const first = await MCPTestSession.connect(accessToken);
-    const slug = TestClient.uniqueName('org');
-    await first.call('agentAddressClaimWork', { organization: slug, host: 'mypc', handle: 'first' });
-
     const second = await MCPTestSession.connect(accessToken);
-    const claimed = await second.call('agentAddressClaimWork', {});
-    expect(claimed.isError).toBe(false);
-    expect(claimed.data.workAddress.canonical).toMatch(new RegExp(`^${slug}/mypc/session-[0-9a-f]{6}$`));
+
+    const xiaoqing = await first.call('agentAddressEnsureIdentity', {
+      agentDisplayName: '小晴',
+    });
+    const daxiong = await second.call('agentAddressEnsureIdentity', {
+      agentDisplayName: '大熊',
+    });
+
+    expect(xiaoqing.isError).toBe(false);
+    expect(daxiong.isError).toBe(false);
+    expect(xiaoqing.data.session.agentId).not.toBe(daxiong.data.session.agentId);
+    expect(xiaoqing.data.session.id).not.toBe(daxiong.data.session.id);
 
     await first.close();
     await second.close();
   });
 
-  it('keeps one name per session and supports rename and release', async () => {
+  it('never includes Runtime or Resume credentials in model-facing tool definitions', async () => {
     const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
     const session = await MCPTestSession.connect(accessToken);
-    await session.call('agentAddressClaimWork', { organization: TestClient.uniqueName('org'), host: 'mypc', handle: 'job' });
+    const schema = JSON.stringify(await session.listToolDefinitions());
 
-    expect((await session.call('agentAddressClaimWork', { handle: 'again' })).isError).toBe(true);
-
-    const renamed = await session.call('agentAddressRenameWork', { handle: 'job-2' });
-    expect(renamed.data.workAddress.path).toBe('mypc/job-2');
-
-    const released = await session.call('agentAddressReleaseWork');
-    expect(released.data.released).toBe(true);
-    expect((await session.call('agentAddressReleaseWork')).isError).toBe(true);
-
-    const reclaimed = await session.call('agentAddressClaimWork', { handle: 'job-2' });
-    expect(reclaimed.isError).toBe(false);
+    expect(schema).toContain('agentAddressEnsureIdentity');
+    expect(schema).not.toMatch(/resumeToken|runtimeToken|signingSecret/);
+    expect(schema).not.toContain('agentAddressResumeWithToken');
 
     await session.close();
   });
 
-  it('reports a helpful error when the machine is ambiguous', async () => {
-    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
-    const session = await MCPTestSession.connect(accessToken);
-    const result = await session.call('agentAddressClaimWork', { organization: TestClient.uniqueName('org') });
-    expect(result.isError).toBe(true);
-    expect(result.text).toContain('Which machine');
-    await session.close();
-  });
-
-  it('isolates accounts from each other', async () => {
-    const owner = await OAuthTestFlow.signUpAndGetToken();
-    const stranger = await OAuthTestFlow.signUpAndGetToken();
-    const ownerSession = await MCPTestSession.connect(owner.accessToken);
-    const strangerSession = await MCPTestSession.connect(stranger.accessToken);
-
-    const slug = TestClient.uniqueName('org');
-    await ownerSession.call('agentAddressClaimWork', { organization: slug, host: 'mypc', handle: 'secret' });
-
-    const status = await strangerSession.call('agentAddressGetStatus');
-    expect(status.data.organization).toBeNull();
-    expect((await strangerSession.call('agentAddressRenameWork', { handle: 'x' })).isError).toBe(true);
-
-    await ownerSession.close();
-    await strangerSession.close();
-  });
-
-  it('prepares a local install whose code enrolls the machine', async () => {
-    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
-    const session = await MCPTestSession.connect(accessToken);
-    const slug = TestClient.uniqueName('org');
-    await session.call('agentAddressClaimWork', { organization: slug, host: 'cloud', handle: 'chat' });
-
-    const install = await session.call('agentAddressInstallLocal', { host: 'mypc' });
-    expect(install.isError).toBe(false);
-    expect(install.data.instructions).toContain('/v1/enrollments/redeem');
-
-    const redeemed = await new TestClient().call('POST', '/v1/enrollments/redeem', {
-      body: { code: install.data.enrollmentCode },
-    });
-    expect(redeemed.status).toBe(200);
-    expect(redeemed.body.data.address.canonical).toBe(`${slug}/mypc`);
-
-    await session.close();
-  });
 });

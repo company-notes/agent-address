@@ -2,246 +2,232 @@ import { McpAgent } from 'agents/mcp';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
-import { AccountController } from './AccountAPI';
 import { AccountProps } from './Authorize';
 import { Env } from './Env';
+import { IdentityAPIClient } from './IdentityAPIClient';
+import { AgentRow, PublicSession } from './IdentityService';
+import { IdentitySummary, MCPIdentityLifecycle } from './MCPIdentityLifecycle';
 
-type PublicAddress = {
-  id: string;
-  org: string;
-  handle: string;
-  path: string;
-  address: string;
-  canonical: string;
+type AccountStatus = {
+  account: { email: string };
+  organization: { id: string; slug: string; displayName: string } | null;
 };
 
-type PublicOrganization = {
-  id: string;
-  slug: string;
-  displayName: string;
-};
-
-type AccountAPIResponse<T> =
-  | { ok: true; data: T }
-  | { ok: false; error: { code: string; message: string } };
-
-// Thin in-process client for AccountController: it builds the same Request/Response shape a real
-// HTTP caller of the Account API would use, so every rule the API enforces applies to MCP too -
-// but it skips bearer-token parsing, because McpAgent has already authenticated the caller through
-// OAuthProvider's Durable Object props and the raw access token string never reaches this session.
-class AccountAPIClient {
-  constructor(
-    private readonly env: Env,
-    private readonly identity: AccountProps,
-  ) {}
-
-  async call<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const headers: Record<string, string> = {};
-    if (body !== undefined) {
-      headers['content-type'] = 'application/json';
-    }
-
-    const request = new Request(`https://account.internal${path}`, {
-      method,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-    const response = await new AccountController(this.env).handleAuthenticated(
-      this.identity.accountId,
-      request,
-      this.identity.authVersion,
-    );
-    const payload = (await response.json()) as AccountAPIResponse<T>;
-
-    if (!payload.ok) {
-      throw new Error(payload.error.message);
-    }
-
-    return payload.data;
-  }
-}
-
-// One instance per MCP session. The account comes from OAuth; the session's own work address is
-// remembered in Durable Object storage so it survives reconnects of the same session.
+// MCP is a thin adapter. Identity, authorization and Runtime ownership remain
+// inside the shared HTTP domain services, with private connection-scoped state.
 export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
-  static readonly WORK_KEY = 'workAddressId';
+  private static readonly INSTRUCTIONS =
+    'After successful OAuth sign-in, immediately call agentAddressEnsureIdentity. ' +
+    'This action creates a personal Organization if needed, claims an Agent and Default Session ' +
+    'on first use, or safely resumes the same Session when its previous lease has expired. ' +
+    'Do not ask the user to choose an address or manage Runtime/Resume credentials. ' +
+    'If the Agent persona already has a display name, pass it as agentDisplayName; otherwise ' +
+    'let the service choose an address. Do not infer ownership from a persona name, account ' +
+    'membership or someone else\'s address. Only change or forget the existing identity on an ' +
+    'explicit user request. Show the resulting canonical organization/agent/session address. ' +
+    'A second active Runtime cannot be taken over. Runtime and Resume credentials are never ' +
+    'model-visible tool arguments or results. A fresh independent MCP connection gets its own ' +
+    'Agent unless an authorized persisted connection can securely resume its previous one.';
 
-  static readonly INSTRUCTIONS =
-    'Agent Address gives each agent session a name of the form org/@machine/session, ' +
-    'for example example-org/@mypc/build-release. The user is already signed in. ' +
-    'When the user asks to name or "give a name to" this session, call agentAddressClaimWork once. ' +
-    'Pass organization only if the user named it and the account has none yet; the account owns at most one ' +
-    'organization, so otherwise omit it. Pass host with the machine name the user gave; if the tool asks which ' +
-    'machine, ask the user. If the user gives no session name, omit handle and a temporary name is assigned. ' +
-    'If a local agent on the machine needs its own host credential, call agentAddressInstallLocal and pass it ' +
-    'the resulting enrollment code. Do not claim a new name for every message. After claiming or renaming, ' +
-    'tell the user the active address.';
+  private pendingEnsure: Promise<IdentitySummary> | null = null;
 
   server = new McpServer(
-    { name: 'Agent Address', version: '0.3.0' },
+    { name: 'Agent Address', version: '2.0.0' },
     { instructions: AddressMCP.INSTRUCTIONS },
   );
 
-  private get accountAPI(): AccountAPIClient {
-    return new AccountAPIClient(this.env, this.props!);
+  private get api(): IdentityAPIClient {
+    return new IdentityAPIClient(this.env, this.props!);
+  }
+
+  private get identityManager(): MCPIdentityLifecycle {
+    return new MCPIdentityLifecycle(this.api, this.ctx.storage, this.props!.accountId);
   }
 
   private static textResult(data: unknown) {
     return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
   }
 
-  private static describeSession(message: string, orgSlug: string, work: PublicAddress) {
-    return AddressMCP.textResult({ workAddress: work, message: `${message} ${orgSlug}/@${work.path}.` });
-  }
-
-  private loadWorkAddressId(): Promise<string | undefined> {
-    return this.ctx.storage.get<string>(AddressMCP.WORK_KEY);
-  }
-
-  private async requireWorkAddressId(): Promise<string> {
-    const addressId = await this.loadWorkAddressId();
-    if (!addressId) {
-      throw new Error('This agent session has no name yet. Call agentAddressClaimWork first.');
+  private async ensureIdentity(displayName?: string): Promise<IdentitySummary> {
+    if (!this.pendingEnsure) {
+      this.pendingEnsure = this.identityManager.ensure(displayName);
     }
 
-    return addressId;
+    try {
+      return await this.pendingEnsure;
+    } finally {
+      this.pendingEnsure = null;
+    }
   }
 
-  private registerStatusTool(): void {
+  private registerEnsure(): void {
     this.server.registerTool(
-      'agentAddressGetStatus',
+      'agentAddressEnsureIdentity',
       {
-        description:
-          "Show the signed-in account, its organization, its machines (hosts) and this session's current name.",
-      },
-      async () => {
-        const workAddressId = await this.loadWorkAddressId();
-        const query = workAddressId ? `?work_address_id=${encodeURIComponent(workAddressId)}` : '';
-        return AddressMCP.textResult(await this.accountAPI.call('GET', `/v1/account/status${query}`));
-      },
-    );
-  }
-
-  private registerClaimTool(): void {
-    this.server.registerTool(
-      'agentAddressClaimWork',
-      {
-        description:
-          'Give this session a name (org/@machine/session). Registers the organization first if the account has ' +
-          'none and one is provided, creates the machine if it is new, and assigns a temporary name when no ' +
-          'handle is given.',
+        description: 'Use immediately after OAuth login. Automatically create or restore this ' +
+          'Agent\'s private Session without user-managed credentials or naming questions.',
         inputSchema: {
-          handle: z.string().optional().describe('Session name in kebab-case. Omit for a temporary name.'),
-          host: z.string().optional().describe('Machine name such as mypc. Needed unless the account has exactly one.'),
-          organization: z.string().optional().describe('Organization slug. Only needed to register a new organization.'),
-          organizationDisplayName: z.string().optional(),
-          displayName: z.string().optional(),
+          agentDisplayName: z.string().trim().min(1).max(120).optional(),
         },
       },
-      async (request) => {
-        if (await this.loadWorkAddressId()) {
-          throw new Error('This session already has a name. Rename or release it instead.');
-        }
-
-        const claimed = await this.accountAPI.call<{ organization: PublicOrganization; work: PublicAddress }>(
-          'POST',
-          '/v1/account/work',
-          request,
-        );
-        await this.ctx.storage.put(AddressMCP.WORK_KEY, claimed.work.id);
-        return AddressMCP.describeSession('This session is now', claimed.organization.slug, claimed.work);
-      },
+      async ({ agentDisplayName }) => AddressMCP.textResult(
+        await this.ensureIdentity(agentDisplayName),
+      ),
     );
   }
 
-  private registerRenameTool(): void {
+  private registerStatus(): void {
     this.server.registerTool(
-      'agentAddressRenameWork',
+      'agentAddressGetStatus',
+      { description: 'Read the signed-in Account, Organization and locally selected Session.' },
+      async () => AddressMCP.textResult({
+        ...await this.api.call<AccountStatus>('GET', '/v2/account/status'),
+        session: await this.identityManager.current(),
+      }),
+    );
+  }
+
+  private registerOrganization(): void {
+    this.server.registerTool(
+      'agentAddressRegisterOrganization',
       {
-        description: 'Rename this session, keeping the same machine.',
-        inputSchema: { handle: z.string() },
+        description: 'Explicitly register a named Organization if the user requests one. ' +
+          'Normal onboarding creates a private personal Organization automatically.',
+        inputSchema: {
+          slug: z.string(),
+          displayName: z.string(),
+        },
       },
-      async ({ handle }) => {
-        const workAddressId = await this.requireWorkAddressId();
-        const work = await this.accountAPI.call<PublicAddress>(
-          'PATCH',
-          `/v1/account/work/${encodeURIComponent(workAddressId)}`,
-          { handle },
-        );
-        return AddressMCP.describeSession('This session is now', work.org, work);
-      },
+      async (input) => AddressMCP.textResult(
+        await this.api.call('POST', '/v2/account/organization', input),
+      ),
     );
   }
 
-  private registerReleaseTool(): void {
+  private registerClaim(): void {
     this.server.registerTool(
-      'agentAddressReleaseWork',
-      { description: "Release this session's name when the work is finished so it can be reused." },
-      async () => {
-        const workAddressId = await this.requireWorkAddressId();
-        const work = await this.accountAPI.call<PublicAddress>(
-          'DELETE',
-          `/v1/account/work/${encodeURIComponent(workAddressId)}`,
-        );
-        await this.ctx.storage.delete(AddressMCP.WORK_KEY);
-        return AddressMCP.textResult({ released: true, canonical: work.canonical });
+      'agentAddressClaimAgent',
+      {
+        description: 'Explicitly create a new Agent and initial Default Session; no private ' +
+          'Runtime or Resume credentials are returned. Use Ensure for normal onboarding.',
+        inputSchema: {
+          agentName: z.string().optional(),
+          sessionName: z.string().optional(),
+          agentDisplayName: z.string().optional(),
+          sessionDisplayName: z.string().optional(),
+          runtimeLabel: z.string().optional(),
+        },
       },
+      async (input) => AddressMCP.textResult(await this.identityManager.claim(input)),
     );
   }
 
-  private registerResolveTool(): void {
+  private registerCreateSession(): void {
+    this.server.registerTool(
+      'agentAddressCreateSession',
+      {
+        description: 'Explicitly create another Session under an authorized Agent after ' +
+          'releasing the current Session.',
+        inputSchema: {
+          agentID: z.string(),
+          sessionName: z.string().optional(),
+          sessionDisplayName: z.string().optional(),
+          runtimeLabel: z.string().optional(),
+        },
+      },
+      async ({ agentID, ...input }) => AddressMCP.textResult(
+        await this.identityManager.claimSession(agentID, input),
+      ),
+    );
+  }
+
+  private registerResume(): void {
+    this.server.registerTool(
+      'agentAddressResumeSession',
+      {
+        description: 'Restore only the Session privately saved in this MCP connection. ' +
+          'Never request or return a Resume capability in model-visible text.',
+      },
+      async () => AddressMCP.textResult(await this.identityManager.resume()),
+    );
+  }
+
+  private registerHeartbeat(): void {
+    this.server.registerTool(
+      'agentAddressHeartbeatRuntime',
+      { description: 'Renew the current Session\'s private active Runtime lease.' },
+      async () => AddressMCP.textResult(await this.identityManager.heartbeat()),
+    );
+  }
+
+  private registerRelease(): void {
+    this.server.registerTool(
+      'agentAddressReleaseRuntime',
+      {
+        description: 'Release Runtime ownership but retain private Session Resume information. ' +
+          'Ensure can restore this Session afterward.',
+      },
+      async () => AddressMCP.textResult(await this.identityManager.release()),
+    );
+  }
+
+  private registerForgetLocal(): void {
+    this.server.registerTool(
+      'agentAddressForgetLocalSession',
+      {
+        description: 'Explicitly forget this MCP connection\'s saved identity after authorized ' +
+          'release or external revocation. This does not revoke a live remote Runtime.',
+      },
+      async () => AddressMCP.textResult(await this.identityManager.forget()),
+    );
+  }
+
+  private registerDirectory(): void {
+    this.server.registerTool(
+      'agentAddressListAgents',
+      { description: 'List authorized Agents and their Default Sessions in your Organization.' },
+      async () => AddressMCP.textResult(
+        await this.api.call<AgentRow[]>('GET', '/v2/account/agents'),
+      ),
+    );
+
+    this.server.registerTool(
+      'agentAddressListSessions',
+      {
+        description: 'List Sessions belonging to an authorized Agent.',
+        inputSchema: { agentID: z.string() },
+      },
+      async ({ agentID }) => AddressMCP.textResult(
+        await this.api.call<PublicSession[]>(
+          'GET', `/v2/account/agents/${encodeURIComponent(agentID)}/sessions`,
+        ),
+      ),
+    );
+
     this.server.registerTool(
       'agentAddressResolve',
       {
-        description: 'Resolve @machine/session in your organization, or an explicit org/machine/session address.',
+        description: 'Resolve an Agent shorthand or full canonical address to a real Session.',
         inputSchema: { address: z.string() },
       },
-      async ({ address }) => {
-        const resolved = await this.accountAPI.call(
-          'GET',
-          `/v1/account/resolve?address=${encodeURIComponent(address)}`,
-        );
-
-        return AddressMCP.textResult(resolved);
-      },
-    );
-  }
-
-  private registerInstallLocalTool(): void {
-    this.server.registerTool(
-      'agentAddressInstallLocal',
-      {
-        description:
-          "Prepare the user's machine for a local agent that needs its own host credential: registers the " +
-          'machine name if needed and returns a one-time enrollment code (valid 15 minutes, single use) that ' +
-          'the local agent redeems via POST /v1/enrollments/redeem.',
-        inputSchema: { host: z.string().describe('Machine name such as mypc.') },
-      },
-      async ({ host }) => {
-        const install = await this.accountAPI.call<{ host: PublicAddress; enrollmentCode: string; expiresAt: string }>(
-          'POST',
-          '/v1/account/local-install',
-          { host },
-        );
-        return AddressMCP.textResult({
-          host: install.host,
-          enrollmentCode: install.enrollmentCode,
-          expiresAt: install.expiresAt,
-          instructions:
-            `Give this code to the local agent on ${install.host.org}/@${install.host.path}. It redeems the ` +
-            'code once, within 15 minutes, via POST /v1/enrollments/redeem { "code": "..." } to obtain this ' +
-            "machine's host credential (addressToken).",
-        });
-      },
+      async ({ address }) => AddressMCP.textResult(
+        await this.api.call<PublicSession>(
+          'GET', `/v2/account/resolve?address=${encodeURIComponent(address)}`,
+        ),
+      ),
     );
   }
 
   async init(): Promise<void> {
-    this.registerStatusTool();
-    this.registerClaimTool();
-    this.registerRenameTool();
-    this.registerReleaseTool();
-    this.registerResolveTool();
-    this.registerInstallLocalTool();
+    this.registerEnsure();
+    this.registerStatus();
+    this.registerOrganization();
+    this.registerClaim();
+    this.registerCreateSession();
+    this.registerResume();
+    this.registerHeartbeat();
+    this.registerRelease();
+    this.registerForgetLocal();
+    this.registerDirectory();
   }
 }

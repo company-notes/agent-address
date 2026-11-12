@@ -1,10 +1,10 @@
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 
 import { Env } from './Env';
-import { APIError } from './HTTP';
+import { ApplicationError } from './ApplicationError';
 
 // Authentication for internal administrators is separate from account OAuth and from the UI.
-// An Access policy also needs to protect /admin/* and /v1/admin/* at the Cloudflare edge.
+// Cloudflare Access protects /admin/*, including /admin/api/*, at the edge.
 export class AdminAuthenticator {
   private static readonly TEAM_NAME_RE = /^[a-z0-9-]+$/;
   private static readonly jwksByTeam = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
@@ -24,12 +24,12 @@ export class AdminAuthenticator {
     const allowed = (env.ADMIN_ALLOWED_EMAILS ?? '').split(',').map((email) => email.trim().toLowerCase()).filter(Boolean);
 
     if (!AdminAuthenticator.TEAM_NAME_RE.test(teamName) || !audience || allowed.length === 0) {
-      throw new APIError(503, 'admin_unconfigured', 'Administration is not configured.');
+      throw new ApplicationError(503, 'admin_unconfigured', 'Administration is not configured.');
     }
 
     const token = request.headers.get('cf-access-jwt-assertion');
     if (!token) {
-      throw new APIError(401, 'admin_unauthorized', 'Cloudflare Access authentication required.');
+      throw new ApplicationError(401, 'admin_unauthorized', 'Cloudflare Access authentication required.');
     }
 
     let email: string;
@@ -42,11 +42,11 @@ export class AdminAuthenticator {
       email = typeof verified.payload.email === 'string' ? verified.payload.email.trim().toLowerCase() : '';
     } catch (error) {
       console.debug('Cloudflare Access JWT verification failed:', error);
-      throw new APIError(401, 'admin_unauthorized', 'Cloudflare Access token is invalid.');
+      throw new ApplicationError(401, 'admin_unauthorized', 'Cloudflare Access token is invalid.');
     }
 
     if (!email || !allowed.includes(email)) {
-      throw new APIError(403, 'admin_forbidden', 'This identity is not an administrator.');
+      throw new ApplicationError(403, 'admin_forbidden', 'This identity is not an administrator.');
     }
     return email;
   }
@@ -57,7 +57,7 @@ export class AdminAuthenticator {
     const fetchSite = request.headers.get('sec-fetch-site');
 
     if (origin !== expectedOrigin || (fetchSite && fetchSite !== 'same-origin')) {
-      throw new APIError(403, 'admin_cross_origin', 'Administration changes require a same-origin request.');
+      throw new ApplicationError(403, 'admin_cross_origin', 'Administration changes require a same-origin request.');
     }
   }
 }

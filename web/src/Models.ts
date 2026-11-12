@@ -6,45 +6,38 @@ export interface AccountSummary extends BaseRecord {
   orgId: string | null;
   organizationSlug: string | null;
   createdAt: string;
-  hostCount: number;
-  workCount: number;
+  agentCount: number;
+  sessionCount: number;
 }
 
-export interface Address {
+export type AgentSummary = {
   id: string;
+  handle: string;
+  displayName: string | null;
+  createdAt: string;
+};
+
+export type SessionSummary = {
+  id: string;
+  agentId: string;
+  agentHandle: string;
+  handle: string;
   canonical: string;
-  kind: string;
-  active: boolean;
+  displayName: string | null;
+  isDefault: boolean;
   createdAt: string;
-}
+};
 
-export interface Credential {
-  id: string;
-  kind: string;
-  addressId: string | null;
-  createdAt: string;
-  revokedAt: string | null;
-}
-
-export interface Enrollment {
-  id: string;
-  hostHandle: string;
-  createdAt: string;
-  expiresAt: string;
-  usedAt: string | null;
-}
-
-export interface AuditEvent {
+export type AuditEvent = {
   id: string;
   actorEmail: string;
   eventPath: string;
   createdAt: string;
-}
+};
 
 export interface AccountDetail extends AccountSummary {
-  organization: { slug: string; displayName: string } | null;
-  addresses: Address[];
-  credentials: Credential[];
-  enrollments: Enrollment[];
+  organization: { id: string; slug: string; displayName: string } | null;
+  agents: AgentSummary[];
+  sessions: SessionSummary[];
   auditEvents: AuditEvent[];
 }

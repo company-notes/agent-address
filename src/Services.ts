@@ -1,23 +1,20 @@
 import { AccountService } from './Accounts';
 import { Env } from './Env';
-import { EnrollmentService } from './Enrollments';
-import { RegistryService } from './RegistryService';
-import { SessionAddressService } from './Sessions';
-import { WorkDirectory } from './WorkDirectory';
+import { IdentityService } from './IdentityService';
+import { OrganizationService } from './Organizations';
+import { RuntimeLeaseService } from './RuntimeLeaseService';
 
-// Composition root for the domain services that share one D1 database.
+// Composition root. The HTTP API and MCP use these same services.
 export class Services {
-  readonly registry: RegistryService;
   readonly accounts: AccountService;
-  readonly enrollments: EnrollmentService;
-  readonly sessions: SessionAddressService;
-  readonly workDirectory: WorkDirectory;
+  readonly organizations: OrganizationService;
+  readonly leases: RuntimeLeaseService;
+  readonly identities: IdentityService;
 
   constructor(env: Env) {
-    this.registry = new RegistryService(env.DB);
-    this.accounts = new AccountService(env.DB, this.registry, env.REGISTRATION_KEY);
-    this.enrollments = new EnrollmentService(env.DB, this.registry);
-    this.sessions = new SessionAddressService(this.accounts, this.registry, this.enrollments);
-    this.workDirectory = new WorkDirectory(this.accounts, this.registry);
+    this.accounts = new AccountService(env.DB, env.REGISTRATION_KEY);
+    this.organizations = new OrganizationService(env.DB);
+    this.leases = new RuntimeLeaseService(env.DB);
+    this.identities = new IdentityService(env.DB, this.organizations, this.leases);
   }
 }

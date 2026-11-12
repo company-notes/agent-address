@@ -1,26 +1,28 @@
 openapi: 3.1.0
 info:
-  title: Agent Address API
-  version: 0.2.0
-  description: Hierarchical organization, host namespace, and concrete work-address registry for independent agent applications. Address responses include kind=host or kind=work.
+  title: Agent Address Identity API
+  version: 2.0.0
+  description: |
+    Organization/Agent/Session identity and Runtime ownership.
+    This API registers and resolves identity; it does not transmit messages.
 servers:
   - url: https://address.company-notes.com
+security:
+  - oauthBearer: []
 paths:
-  /health:
+  /v2/account/status:
     get:
-      summary: Health check
+      summary: Show signed-in account and Organization
       responses:
-        '200':
-          description: Healthy
-
-  /v1/orgs:
+        '200': { description: Account identity and Organization }
+        '401': { description: OAuth authorization required }
+  /v2/account/organization:
+    patch:
+      summary: Update Organization display name
+      responses:
+        '200': { description: Updated Organization }
     post:
-      summary: Create an organization
-      parameters:
-        - in: header
-          name: X-Registration-Key
-          required: false
-          schema: { type: string }
+      summary: Register Organization for the signed-in account
       requestBody:
         required: true
         content:
@@ -29,338 +31,222 @@ paths:
               type: object
               required: [slug, displayName]
               properties:
-                slug: { type: string, example: example-org }
-                displayName: { type: string, example: Example Organization }
-      responses:
-        '201':
-          description: Organization created; orgToken is returned once
-
-  /v1/orgs/{org}/addresses:
-    parameters:
-      - in: path
-        name: org
-        required: true
-        schema: { type: string }
-    post:
-      summary: Create a root host/environment namespace
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [handle]
-              properties:
-                handle: { type: string, example: mypc }
-                displayName: { type: string, example: Main development PC }
-      responses:
-        '201':
-          description: Root address created; addressToken is returned once
-    get:
-      summary: List all addresses in an organization
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Address list
-
-  /v1/addresses/{addressId}/children:
-    parameters:
-      - in: path
-        name: addressId
-        required: true
-        schema: { type: string }
-    post:
-      summary: Create a child work address under an owned address
-      description: The bearer token must belong to the parent address.
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [handle]
-              properties:
-                handle: { type: string, example: build-release }
-                displayName: { type: string, example: Build Release 0.18.3 }
-      responses:
-        '201':
-          description: Child address created; addressToken is returned once
-
-  /v1/addresses/{addressId}:
-    parameters:
-      - in: path
-        name: addressId
-        required: true
-        schema: { type: string }
-    patch:
-      summary: Rename an owned address
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [handle]
-              properties:
-                handle: { type: string, example: release-0183 }
-      responses:
-        '200':
-          description: Renamed address
-    delete:
-      summary: Revoke an owned address and all descendants
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Revoked address; its path may be reused by a future active address
-
-  /v1/resolve/{org}/{path}:
-    parameters:
-      - in: path
-        name: org
-        required: true
-        schema: { type: string }
-      - in: path
-        name: path
-        required: true
-        schema:
-          type: string
-          example: mypc/build-release
-    get:
-      summary: Resolve an exact hierarchical address
-      responses:
-        '200':
-          description: Active address
-
-  /v1/me:
-    get:
-      summary: Resolve the bearer credential to its organization or address identity
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Authenticated identity
-
-  /mcp:
-    post:
-      summary: Remote MCP endpoint (Streamable HTTP, OAuth 2.1)
-      description: >
-        Model Context Protocol server. Clients discover the authorization server from
-        /.well-known/oauth-protected-resource, register dynamically at /register, and authorize at
-        /authorize (account sign-in or sign-up) with PKCE. Tools: agentAddressGetStatus,
-        agentAddressClaimWork, agentAddressRenameWork, agentAddressReleaseWork, agentAddressResolve,
-        agentAddressInstallLocal. One account owns at most one organization. Each tool is a thin
-        wrapper over the Account API below (/v1/account/*) - MCP is a client of that API, not a
-        parallel implementation.
-      security:
-        - oauth: []
-      responses:
-        '200':
-          description: MCP JSON-RPC or SSE response
-        '401':
-          description: Missing or invalid OAuth access token
-
-  /authorize:
-    get:
-      summary: OAuth authorization page (sign in or create an account)
-      responses:
-        '200':
-          description: HTML form
-    post:
-      summary: Submit the sign-in or sign-up form and complete the grant
-      responses:
-        '302':
-          description: Redirect to the client with an authorization code
-        '400':
-          description: Form re-rendered with an error
-
-  /token:
-    post:
-      summary: OAuth token endpoint (authorization_code, refresh_token)
-      responses:
-        '200':
-          description: Access and refresh tokens
-
-  /register:
-    post:
-      summary: OAuth dynamic client registration (RFC 7591)
-      responses:
-        '201':
-          description: Registered client
-
-  /v1/enrollments/redeem:
-    post:
-      summary: Exchange a one-time enrollment code for a host credential
-      description: >
-        Codes come from agentAddressInstallLocal or POST /v1/account/local-install, expire after 15 minutes
-        and work once. If the host already exists its credential is rotated.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [code]
-              properties:
-                code:
-                  type: string
-      responses:
-        '200':
-          description: Host address and one-time addressToken
-        '400':
-          description: Code is invalid, expired or already used
-
-  /v1/account/status:
-    get:
-      summary: Show the signed-in account, its organization, its hosts and one session's name
-      description: >
-        This is the Account API: everything an OAuth-authenticated account can do to name and
-        manage its agent sessions, callable directly over HTTP by any product - our own remote MCP
-        included - without speaking MCP.
-      security:
-        - oauth: []
-      parameters:
-        - in: query
-          name: work_address_id
-          required: false
-          description: Immutable id of the session to describe. Omitted when the caller has none yet.
-          schema: { type: string }
-      responses:
-        '200':
-          description: Account, organization (or null), hosts and the named session (or null)
-
-  /v1/account/works:
-    get:
-      summary: List active Work recipients in this account's Organization
-      description: >
-        Returns direct child Work addresses of active Hosts, excluding revoked,
-        nested and cross-Organization addresses. Provides stable canonical Work
-        addresses and parent Host references; directory visibility does not
-        imply per-Bot OAuth access. Exact address resolution remains separate.
-      security:
-        - oauth: []
-      parameters:
-        - in: query
-          name: limit
-          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
-        - in: query
-          name: cursor
-          schema: { type: string, description: Exact last Work path from the previous page }
-        - in: query
-          name: search
-          schema: { type: string, minLength: 1, maxLength: 64 }
-      responses:
-        '200':
-          description: >
-            Object with items (active Work address records) and nextCursor
-            (the final Work path for the next page, or null).
-        '400':
-          description: Invalid limit, cursor or search
-        '401':
-          description: OAuth required
-        '409':
-          description: Account does not yet have an Organization
-
-  /v1/account/work:
-    post:
-      summary: Name a session (register the organization/host if needed)
-      security:
-        - oauth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                organization: { type: string, description: Only needed to register a new organization. }
-                organizationDisplayName: { type: string }
-                host: { type: string, description: Machine name; needed unless the account has exactly one host. }
-                handle: { type: string, description: Session name; a temporary name is assigned when omitted. }
+                slug: { type: string }
                 displayName: { type: string }
       responses:
-        '201':
-          description: organization, host and work addresses
-        '409':
-          description: account_has_organization, host_required or no_organization
-
-  /v1/account/work/{addressId}:
-    parameters:
-      - in: path
-        name: addressId
-        required: true
-        schema: { type: string }
-    patch:
-      summary: Rename the account's session, keeping the same host
-      security:
-        - oauth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { type: object, required: [handle], properties: { handle: { type: string } } }
-      responses:
-        '200':
-          description: Renamed address
-        '403':
-          description: Address does not belong to this account
-    delete:
-      summary: Release the account's session so the name can be reused
-      security:
-        - oauth: []
-      responses:
-        '200':
-          description: Released address
-
-  /v1/account/resolve:
+        '201': { description: Organization registered }
+        '409': { description: Account already belongs to an Organization or name is taken }
+  /v2/account/agents:
     get:
-      summary: Resolve @host/session in the account's organization, or org/host/session
-      security:
-        - oauth: []
-      parameters:
-        - in: query
-          name: address
-          required: true
-          schema: { type: string, example: '@mypc/build-release' }
+      summary: List Agents in the current Organization
       responses:
-        '200':
-          description: Resolved address
-        '404':
-          description: Active address not found
-
-  /v1/account/local-install:
+        '200': { description: Agent directory }
     post:
-      summary: Prepare a one-time code to enroll a machine into the account's organization
-      description: >
-        Registers the host if it is new and returns a code (enrollmentCode) a local agent redeems via
-        POST /v1/enrollments/redeem to obtain that host's addr_HOST... credential.
-      security:
-        - oauth: []
+      summary: Register a new Agent and its initial default Session without occupying a Runtime
       requestBody:
         required: true
         content:
           application/json:
-            schema: { type: object, required: [host], properties: { host: { type: string, example: mypc } } }
+            schema:
+              $ref: '#/components/schemas/NewAgent'
       responses:
-        '200':
-          description: Host address, enrollmentCode and expiresAt
-
+        '201': { description: Agent/Session identity and one-time resume capability }
+        '409': { description: Name conflict or no Organization }
+  /v2/account/agents/claim:
+    post:
+      summary: Create a new Agent and Default Session with an exclusive Runtime lease
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewAgent'
+      responses:
+        '201': { description: Agent/Session identity and resume/runtime capabilities }
+        '409': { description: Name conflict or no Organization }
+  /v2/account/agents/{agentID}:
+    parameters:
+      - $ref: '#/components/parameters/agentID'
+    patch:
+      summary: Change the Agent handle or display name; old address is not retained
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                agentName: { type: string }
+                agentDisplayName: { type: [string, 'null'] }
+      responses:
+        '200': { description: Updated Agent }
+        '409': { description: Agent name is already in use }
+    delete:
+      summary: Archive Agent and all Sessions; revoke active Runtime leases
+      responses:
+        '200': { description: Agent archived }
+        '404': { description: Agent does not belong to current Organization }
+  /v2/account/agents/{agentID}/sessions:
+    parameters:
+      - $ref: '#/components/parameters/agentID'
+    get:
+      summary: List Sessions for one Agent
+      responses:
+        '200': { description: Sessions }
+        '404': { description: Agent not found in this Organization }
+    post:
+      summary: Register an additional non-default Session without occupying a Runtime
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewSession'
+      responses:
+        '201': { description: New Session and one-time capabilities }
+  /v2/account/agents/{agentID}/sessions/claim:
+    parameters:
+      - $ref: '#/components/parameters/agentID'
+    post:
+      summary: Create a new non-default Session and acquire an exclusive Runtime lease
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewSession'
+      responses:
+        '201': { description: Session identity and resume/runtime capabilities }
+  /v2/account/sessions/{sessionID}:
+    parameters:
+      - $ref: '#/components/parameters/sessionID'
+    get:
+      summary: Read one Session identity and non-sensitive Runtime state
+      responses:
+        '200': { description: Session identity }
+        '404': { description: Not found or not in this Organization }
+    patch:
+      summary: Change Session handle or display name without changing its identity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sessionName: { type: string }
+                sessionDisplayName: { type: [string, 'null'] }
+      responses:
+        '200': { description: Updated Session with canonical address }
+    delete:
+      summary: Archive non-default Session and revoke its Runtime lease
+      responses:
+        '200': { description: Session archived }
+        '409': { description: Assign another Default Session first }
+  /v2/account/sessions/{sessionID}/default:
+    parameters:
+      - $ref: '#/components/parameters/sessionID'
+    put:
+      summary: Set the Agent's Default Session
+      responses:
+        '200': { description: Default Session changed atomically }
+  /v2/account/sessions/{sessionID}/rotate-resume:
+    parameters:
+      - $ref: '#/components/parameters/sessionID'
+    post:
+      summary: Replace an existing Session's private resume capability
+      responses:
+        '200': { description: New one-time Resume Token; existing Runtime lease remains active }
+  /v2/account/sessions/{sessionID}/resume:
+    parameters:
+      - $ref: '#/components/parameters/sessionID'
+    post:
+      summary: Resume an unoccupied Session with a private resume capability
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resumeToken]
+              properties:
+                resumeToken: { type: string }
+                runtimeLabel: { type: string }
+      responses:
+        '200': { description: New Runtime capability and existing Session identity }
+        '403': { description: Invalid resume capability }
+        '409': { description: Session already held by an active Runtime }
+  /v2/account/sessions/{sessionID}/heartbeat:
+    parameters:
+      - $ref: '#/components/parameters/sessionID'
+    post:
+      summary: Renew the exclusive Runtime lease
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimeCapability'
+      responses:
+        '200': { description: Renewed expiration }
+        '409': { description: Runtime is no longer the owner }
+  /v2/account/sessions/{sessionID}/release:
+    parameters:
+      - $ref: '#/components/parameters/sessionID'
+    post:
+      summary: Release Runtime ownership without deleting Session identity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimeCapability'
+      responses:
+        '200': { description: Session is available for a subsequent authorized resume }
+  /v2/account/resolve:
+    get:
+      summary: Resolve a canonical Session address or an Agent default Session
+      parameters:
+        - name: address
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Canonical Session }
+        '403': { description: Address belongs to a different Organization }
 components:
+  parameters:
+    agentID:
+      name: agentID
+      in: path
+      required: true
+      schema: { type: string }
+    sessionID:
+      name: sessionID
+      in: path
+      required: true
+      schema: { type: string }
+  schemas:
+    NewSession:
+      type: object
+      properties:
+        sessionName: { type: string }
+        sessionDisplayName: { type: string }
+        runtimeLabel: { type: string }
+    NewAgent:
+      allOf:
+        - $ref: '#/components/schemas/NewSession'
+        - type: object
+          properties:
+            agentName: { type: string }
+            agentDisplayName: { type: string }
+    RuntimeCapability:
+      type: object
+      required: [runtimeToken]
+      properties:
+        runtimeToken: { type: string }
   securitySchemes:
-    oauth:
-      type: oauth2
-      flows:
-        authorizationCode:
-          authorizationUrl: /authorize
-          tokenUrl: /token
-          scopes: {}
-    bearerAuth:
+    oauthBearer:
       type: http
       scheme: bearer
+      bearerFormat: OAuth

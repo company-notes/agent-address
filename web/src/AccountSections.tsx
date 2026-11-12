@@ -1,6 +1,6 @@
 import { Descriptions, Table, Tag, Typography } from 'antd';
 
-import type { AccountDetail, Address, AuditEvent, Credential, Enrollment } from './Models';
+import type { AccountDetail, AgentSummary, AuditEvent, SessionSummary } from './Models';
 
 export function OrganizationSummary({ account }: { account: AccountDetail }) {
   return (
@@ -18,75 +18,50 @@ export function OrganizationSummary({ account }: { account: AccountDetail }) {
   );
 }
 
-export function AddressList({ addresses }: { addresses: Address[] }) {
+export function AgentList({ agents }: { agents: AgentSummary[] }) {
   return (
     <section>
-      <Typography.Title level={5}>Host and Work addresses</Typography.Title>
+      <Typography.Title level={5}>Agent identities</Typography.Title>
       <Table
-        dataSource={addresses}
+        dataSource={agents}
         rowKey="id"
+        size="small"
         pagination={{ pageSize: 8 }}
-        size="small"
-        scroll={{ x: 450 }}
-      >
-        <Table.Column title="Address" dataIndex="canonical" />
-        <Table.Column title="Kind" dataIndex="kind" />
-        <Table.Column
-          title="Status"
-          dataIndex="active"
-          render={(active: boolean) => (
-            <Tag color={active ? 'green' : 'default'}>
-              {active ? 'Active' : 'Revoked'}
-            </Tag>
-          )}
-        />
-      </Table>
-    </section>
-  );
-}
-
-export function CredentialList({ credentials }: { credentials: Credential[] }) {
-  return (
-    <section>
-      <Typography.Title level={5}>Credentials (metadata only)</Typography.Title>
-      <Table
-        dataSource={credentials}
-        rowKey="id"
-        pagination={{ pageSize: 5 }}
-        size="small"
-        scroll={{ x: 400 }}
-      >
-        <Table.Column title="Type" dataIndex="kind" />
-        <Table.Column title="Created" dataIndex="createdAt" />
-        <Table.Column
-          title="Status"
-          dataIndex="revokedAt"
-          render={(revokedAt: string | null) => (
-            revokedAt ? <Tag>Revoked</Tag> : <Tag color="green">Active</Tag>
-          )}
-        />
-      </Table>
-    </section>
-  );
-}
-
-export function EnrollmentList({ enrollments }: { enrollments: Enrollment[] }) {
-  return (
-    <section>
-      <Typography.Title level={5}>Enrollments</Typography.Title>
-      <Table
-        dataSource={enrollments}
-        rowKey="id"
-        pagination={{ pageSize: 5 }}
-        size="small"
         scroll={{ x: 430 }}
       >
-        <Table.Column title="Host" dataIndex="hostHandle" />
-        <Table.Column title="Expires" dataIndex="expiresAt" />
+        <Table.Column title="Address handle" dataIndex="handle" />
         <Table.Column
-          title="Used"
-          dataIndex="usedAt"
-          render={(value: string | null) => value ?? 'Unused'}
+          title="Display name"
+          dataIndex="displayName"
+          render={(value: string | null) => value ?? '—'}
+        />
+        <Table.Column title="Registered" dataIndex="createdAt" />
+      </Table>
+    </section>
+  );
+}
+
+export function SessionList({ sessions }: { sessions: SessionSummary[] }) {
+  return (
+    <section>
+      <Typography.Title level={5}>Agent Sessions</Typography.Title>
+      <Table
+        dataSource={sessions}
+        rowKey="id"
+        size="small"
+        pagination={{ pageSize: 8 }}
+        scroll={{ x: 520 }}
+      >
+        <Table.Column title="Canonical address" dataIndex="canonical" />
+        <Table.Column
+          title="Display name"
+          dataIndex="displayName"
+          render={(value: string | null) => value ?? '—'}
+        />
+        <Table.Column
+          title="Default"
+          dataIndex="isDefault"
+          render={(isDefault: boolean) => isDefault && <Tag color="blue">Default</Tag>}
         />
       </Table>
     </section>

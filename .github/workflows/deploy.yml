@@ -59,10 +59,24 @@ jobs:
           npm --prefix web install --no-save --no-package-lock --no-audit --no-fund playwright@1.65.0
       - name: Browser E2E against local test server (never production)
         run: node web/e2e/admin-browser.mjs
+      - name: Real browser Portal flow against local Worker, OAuth and D1
+        run: node web/e2e/portal-browser.mjs
+      - name: Verify isolated D1 schema cutover guard
+        run: |
+          node --test scripts/check-d1-cutover.checks.mjs
+          node scripts/check-d1-cutover.mjs --local
+          npx wrangler d1 execute DB --local --config .wrangler.deploy.jsonc \
+            --persist-to .wrangler-verify/legacy \
+            --command "CREATE TABLE addresses (id TEXT PRIMARY KEY)"
+          if node scripts/check-d1-cutover.mjs --local --persist-to=.wrangler-verify/legacy; then
+            echo "::error::D1 guard accepted a legacy Host/Work schema"
+            exit 1
+          fi
       - name: Validate deployment script syntax
         run: |
           node --check scripts/prepare-deploy.mjs
           node --check scripts/resolve-cloudflare-ids.mjs
+          node --check scripts/check-d1-cutover.mjs
 
   deploy:
     name: Deploy to Cloudflare
@@ -110,10 +124,29 @@ jobs:
               exit 1
             fi
           done
-      - name: Resolve Cloudflare resource names
+      - name: Resolve canonical Cloudflare resources via existing GitHub Secrets and Variables
         run: node scripts/resolve-cloudflare-ids.mjs
       - name: Generate deployment configuration
         run: node scripts/prepare-deploy.mjs
+      - name: Verify official Worker and original resource names before any remote change
+        run: |
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const config = JSON.parse(readFileSync(".wrangler.deploy.jsonc"));
+            if (process.env.CLOUDFLARE_ACCOUNT_ID !== "b471fa2c14470c664eec0a37616accd6" ||
+                config.name !== "agent-address" ||
+                config.d1_databases.find(x => x.binding === "DB")?.database_name !== "company-notes-agent-address" ||
+                config.kv_namespaces.find(x => x.binding === "OAUTH_KV")?.id !== process.env.CLOUDFLARE_OAUTH_KV_ID ||
+                config.d1_databases.find(x => x.binding === "DB")?.database_id !== process.env.CLOUDFLARE_D1_DATABASE_ID ||
+                config.routes?.[0]?.pattern !== "address.company-notes.com" ||
+                config.routes?.[0]?.custom_domain !== true) {
+              throw Error("Canonical Agent Address production configuration mismatch.");
+            }
+          '
+      - name: Validate Worker bundle without production mutation
+        run: npx wrangler deploy --dry-run --config .wrangler.deploy.jsonc --outdir .wrangler-production-check
+      - name: Refuse incompatible D1 cutover before any remote migration
+        run: node scripts/check-d1-cutover.mjs --remote
       - name: Apply D1 migrations
         run: npx wrangler d1 migrations apply DB --remote --config .wrangler.deploy.jsonc
       - name: Deploy Cloudflare Worker
@@ -132,5 +165,5 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-      - name: Verify new deployment's live routes
-        run: node scripts/smoke-admin.mjs
+      - name: Verify official OAuth, MCP, Organization Portal and protected routes
+        run: node scripts/smoke-production.mjs

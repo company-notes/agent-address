@@ -42,19 +42,22 @@ const account = {
   orgId: 'test-organization-1',
   organizationSlug: 'e2e-org',
   createdAt: '2026-11-11T00:00:00.000Z',
-  hostCount: 1,
-  workCount: 1,
+  agentCount: 1,
+  sessionCount: 2,
 };
 
 const detail = {
   ...account,
   organization: { slug: 'e2e-org', displayName: 'E2E Test Organization' },
-  addresses: [
-    { id: 'host-1', canonical: 'host.e2e-org.example.test', kind: 'host', active: true, createdAt: account.createdAt },
-    { id: 'work-1', canonical: 'work.e2e-org.example.test', kind: 'work', active: true, createdAt: account.createdAt },
+  agents: [{ id: 'agent-1', handle: 'releasebot', displayName: 'Release Bot', createdAt: account.createdAt }],
+  sessions: [
+    { id: 'session-1', agentId: 'agent-1', agentHandle: 'releasebot',
+      handle: 'main', canonical: 'e2e-org/releasebot/main',
+      isDefault: true, createdAt: account.createdAt },
+    { id: 'session-2', agentId: 'agent-1', agentHandle: 'releasebot',
+      handle: 'ffl-dev', canonical: 'e2e-org/releasebot/ffl-dev',
+      isDefault: false, createdAt: account.createdAt },
   ],
-  credentials: [{ id: 'credential-1', kind: 'password', addressId: null, createdAt: account.createdAt, revokedAt: null }],
-  enrollments: [],
   auditEvents: [],
 };
 
@@ -68,11 +71,11 @@ try {
   const passwordUpdates = [];
 
   page.on('pageerror', (error) => { pageErrors.push(error.message); });
-  await page.route('**/v1/admin/**', async (route) => {
+  await page.route('**/admin/api/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
     const options = { status: 200, contentType: 'application/json' };
-    if (request.method() === 'GET' && url.pathname === '/v1/admin/accounts') {
+    if (request.method() === 'GET' && url.pathname === '/admin/api/accounts') {
       searchTerms.push(url.searchParams.get('search') ?? '');
       await route.fulfill({
         ...options,
@@ -80,11 +83,11 @@ try {
       });
       return;
     }
-    if (request.method() === 'GET' && url.pathname === '/v1/admin/accounts/' + account.id) {
+    if (request.method() === 'GET' && url.pathname === '/admin/api/accounts/' + account.id) {
       await route.fulfill({ ...options, body: JSON.stringify({ ok: true, data: detail }) });
       return;
     }
-    if (request.method() === 'PUT' && url.pathname === '/v1/admin/accounts/' + account.id + '/password') {
+    if (request.method() === 'PUT' && url.pathname === '/admin/api/accounts/' + account.id + '/password') {
       passwordUpdates.push(JSON.parse(request.postData() ?? '{}'));
       await route.fulfill({ ...options, body: JSON.stringify({ ok: true, data: { id: account.id } }) });
       return;
@@ -94,6 +97,8 @@ try {
 
   await page.goto(origin + '/admin/');
   await page.getByText('Agent Address · Administration').waitFor({ timeout: 15_000 });
+  assert.equal(await page.getByRole('link', { name: 'Organization Portal' })
+    .getAttribute('href'), '/portal/');
   await page.getByText(account.email).first().waitFor({ timeout: 15_000 });
   assert.equal(await page.getByText('Registered accounts').count(), 1);
 
@@ -107,9 +112,9 @@ try {
 
   await page.getByText(account.email).first().click();
   await page.getByText('E2E Test Organization').waitFor({ timeout: 15_000 });
-  await page.getByText('host.e2e-org.example.test').waitFor();
-  await page.getByText('work.e2e-org.example.test').waitFor();
-  await page.getByText('Credentials (metadata only)').waitFor();
+  await page.getByText('e2e-org/releasebot/main').waitFor();
+  await page.getByText('e2e-org/releasebot/ffl-dev').waitFor();
+  await page.getByText('Agent identities').waitFor();
 
   await page.locator('input#password').fill('E2e-Password-2026!');
   await page.locator('input#confirmPassword').fill('E2e-Password-2026!');
@@ -118,7 +123,7 @@ try {
   assert.deepEqual(passwordUpdates, [{ password: 'E2e-Password-2026!' }]);
   assert.deepEqual(pageErrors, [], 'Browser must have no uncaught JavaScript errors');
 
-  console.log('PASS: real Chromium E2E — account list, organization, host/work, search, password reset');
+  console.log('PASS: real Chromium E2E — account list, organization, Agent/Session, search, password reset');
 } finally {
   if (browser) {
     await browser.close();

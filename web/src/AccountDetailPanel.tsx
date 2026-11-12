@@ -2,11 +2,10 @@ import { useOne } from '@refinedev/core';
 import { Alert, Card, Divider, Empty, Spin } from 'antd';
 
 import {
-  AddressList,
+  AgentList,
   AuditEventList,
-  CredentialList,
-  EnrollmentList,
   OrganizationSummary,
+  SessionList,
 } from './AccountSections';
 import type { AccountDetail } from './Models';
 import { PasswordResetForm } from './PasswordResetForm';
@@ -21,7 +20,7 @@ export function AccountDetailPanel({ id }: { id: string | null }) {
   if (!id) {
     return (
       <Card>
-        <Empty description="Select an account to inspect its addresses and credentials." />
+        <Empty description="Select an account to inspect its Agents and Sessions." />
       </Card>
     );
   }
@@ -48,9 +47,8 @@ export function AccountDetailPanel({ id }: { id: string | null }) {
       <OrganizationSummary account={account} />
 
       <Divider />
-      <AddressList addresses={account.addresses} />
-      <CredentialList credentials={account.credentials} />
-      <EnrollmentList enrollments={account.enrollments} />
+      <AgentList agents={account.agents} />
+      <SessionList sessions={account.sessions} />
 
       <Divider />
       <PasswordResetForm key={account.id} accountId={account.id} />

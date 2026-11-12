@@ -1,9 +1,9 @@
 import { exports } from 'cloudflare:workers';
 
 export type APIResult = { status: number; body: any };
-
 type CallOptions = { token?: string; body?: unknown; headers?: Record<string, string> };
 
+// Real Worker HTTP calls, including real OAuth authorization and D1 access.
 export class TestClient {
   static readonly ORIGIN = 'https://address.test';
   static readonly REGISTRATION_KEY = 'test-registration-key';
@@ -11,16 +11,18 @@ export class TestClient {
   private static uniqueCounter = 0;
 
   static uniqueName(prefix: string): string {
-    TestClient.uniqueCounter += 1;
+    this.uniqueCounter += 1;
 
-    return `${prefix}${Date.now().toString(36)}${TestClient.uniqueCounter}`;
+    return `${prefix}${Date.now().toString(36)}${this.uniqueCounter}`;
   }
 
   async call(method: string, path: string, options: CallOptions = {}): Promise<APIResult> {
-    const headers: Record<string, string> = { ...(options.headers ?? {}) };
+    const headers: Record<string, string> = { ...options.headers };
+
     if (options.token) {
       headers.authorization = `Bearer ${options.token}`;
     }
+
     if (options.body !== undefined) {
       headers['content-type'] = 'application/json';
     }
@@ -32,23 +34,21 @@ export class TestClient {
         body: options.body === undefined ? undefined : JSON.stringify(options.body),
       }),
     );
+
     return { status: response.status, body: await response.json() };
   }
 
-  async createOrganization(slug: string): Promise<string> {
-    const result = await this.call('POST', '/v1/orgs', {
-      headers: { 'x-registration-key': TestClient.REGISTRATION_KEY },
+  async registerOrganization(token: string, slug: string): Promise<APIResult> {
+    return this.call('POST', '/v2/account/organization', {
+      token,
       body: { slug, displayName: slug },
     });
-    return result.body.data.orgToken;
   }
 
-  async createHost(slug: string, orgToken: string, handle: string): Promise<{ id: string; token: string }> {
-    const result = await this.call('POST', `/v1/orgs/${slug}/addresses`, { token: orgToken, body: { handle } });
-    return { id: result.body.data.address.id, token: result.body.data.addressToken };
-  }
-
-  async createChild(host: { id: string; token: string }, handle: string): Promise<APIResult> {
-    return this.call('POST', `/v1/addresses/${host.id}/children`, { token: host.token, body: { handle } });
+  async createAgent(token: string, agentName?: string, sessionName?: string): Promise<APIResult> {
+    return this.call('POST', '/v2/account/agents/claim', {
+      token,
+      body: { agentName, sessionName },
+    });
   }
 }
