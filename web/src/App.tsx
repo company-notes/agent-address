@@ -1,5 +1,5 @@
 import { Refine } from '@refinedev/core';
-import { ConfigProvider, Layout, Typography } from 'antd';
+import { Button, ConfigProvider, Layout, Space, Typography } from 'antd';
 
 import { AccountsPage } from './AccountsPage';
 import { PortalApp } from './PortalApp';
@@ -19,7 +19,14 @@ export function App() {
       >
         <Layout className="admin-layout">
           <Layout.Header className="admin-header">
-            <Typography.Title level={4} className="admin-title">Agent Address · Administration</Typography.Title>
+            <Space size="large" align="center">
+            <Typography.Title level={4} className="admin-title">
+              Agent Address · Administration
+            </Typography.Title>
+            <Button type="link" href="/portal/">
+              Organization Portal
+            </Button>
+          </Space>
           </Layout.Header>
           <Layout.Content className="admin-content">
             <AccountsPage />
