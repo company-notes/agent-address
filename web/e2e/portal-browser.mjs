@@ -130,7 +130,7 @@ try {
   // Change Organization and Agent display names and rename their address handles.
   await page.getByLabel('Organization display name').fill('Portal E2E Renamed Team');
   await page.getByRole('button', { name: 'Save Organization' }).click();
-  await page.getByRole('heading', { name: 'Portal E2E Renamed Team' }).waitFor();
+  await page.getByText('Portal E2E Renamed Team', { exact: true }).waitFor();
 
   await page.getByRole('button', { name: 'Edit Agent' }).first().click();
   await page.getByLabel('Edit address handle').fill('xiaomei');
