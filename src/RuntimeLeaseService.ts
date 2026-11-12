@@ -26,6 +26,7 @@ export class RuntimeLeaseService {
   async prepareInitialLease(sessionID: string, runtimeLabel: string | null): Promise<InitialLease> {
     const now = new Date();
     const expiresAt = RuntimeLeaseService.expiration(now);
+
     const runtimeToken = TokenService.randomToken('runtime');
     const tokenHash = await TokenService.sha256Hex(runtimeToken);
 
@@ -41,6 +42,7 @@ export class RuntimeLeaseService {
   async resume(sessionID: string, runtimeLabel: string | null): Promise<AcquiredLease> {
     const now = new Date();
     const expiresAt = RuntimeLeaseService.expiration(now);
+
     const runtimeToken = TokenService.randomToken('runtime');
     const tokenHash = await TokenService.sha256Hex(runtimeToken);
 

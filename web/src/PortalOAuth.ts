@@ -53,6 +53,7 @@ export class PortalOAuth {
     }
 
     const client = await registered.json() as OAuthRegistration;
+
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
     const challenge = this.base64URL(new Uint8Array(digest));
 

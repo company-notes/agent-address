@@ -166,6 +166,7 @@ export class IdentityService {
     const agentHandle = IdentityService.handle(input.agentName, 'agent');
     const sessionHandle = IdentityService.handle(input.sessionName, 'session');
     const createdAt = new Date().toISOString();
+
     const resumeToken = TokenService.randomToken('resume');
     const resumeHash = await TokenService.sha256Hex(resumeToken);
 
@@ -207,6 +208,7 @@ export class IdentityService {
     const agent = await this.requireAgent(org.id, agentID);
     const sessionID = crypto.randomUUID();
     const handle = IdentityService.handle(input.sessionName, 'session');
+
     const resumeToken = TokenService.randomToken('resume');
     const resumeHash = await TokenService.sha256Hex(resumeToken);
     const createdAt = new Date().toISOString();
