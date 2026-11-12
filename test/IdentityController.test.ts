@@ -48,6 +48,28 @@ describe('identity account API boundaries', () => {
     expect(duplicate.body.error.code).toBe('identity_name_taken');
   });
 
+  it('treats ten assistants hosted by one bot as ten Agents with independent main Sessions', async () => {
+    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
+    const slug = TestClient.uniqueName('grok');
+    await client.registerOrganization(accessToken, slug);
+
+    for (let index = 0; index < 10; index += 1) {
+      const name = 'assistant-' + index;
+      const claimed = await client.call('POST', '/v2/account/agents', {
+        token: accessToken,
+        body: { agentName: name },
+      });
+      expect(claimed.status).toBe(201);
+      expect(claimed.body.data.session.canonical).toBe(`${slug}/${name}/main`);
+      expect(claimed.body.data.session.isDefault).toBe(true);
+      expect(claimed.body.data.session.runtime).toBeNull();
+    }
+
+    const agents = await client.call('GET', '/v2/account/agents', { token: accessToken });
+    expect(agents.body.data).toHaveLength(10);
+    expect(new Set(agents.body.data.map((agent: { id: string }) => agent.id)).size).toBe(10);
+  });
+
   it('registers an Agent from Portal without occupying its Session, then allows only one Runtime', async () => {
     const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
     const slug = TestClient.uniqueName('portal');
