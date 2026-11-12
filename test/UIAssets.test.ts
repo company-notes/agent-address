@@ -25,6 +25,8 @@ describe('UI static assets binding', () => {
     expect(UIAssets.matches('/mcp')).toBe(false);
     expect(UIAssets.matches('/token')).toBe(false);
     expect(UIAssets.matches('/v2/account/agents')).toBe(false);
+    expect(UIAssets.matches('/admin/api')).toBe(false);
+    expect(UIAssets.matches('/admin/api/accounts')).toBe(false);
     expect(UIAssets.matches('/portal/')).toBe(true);
     expect(UIAssets.matches('/ui/assets/index.js')).toBe(true);
   });
