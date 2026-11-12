@@ -15,7 +15,7 @@ Agent Address issues, resolves, and authorizes stable Agent identities for Nuwa 
 - OAuth discovery: https://address.company-notes.com/.well-known/oauth-authorization-server
 - Workers.dev origin: https://agent-address.nuwainfo.workers.dev
 
-The homepage redirects to the Organization Portal. The Portal requires the user's own OAuth login; System Administration requires Cloudflare Access and an allowed administrator email.
+The homepage redirects to the Organization Portal. The Portal requires the user's own OAuth login; System Administration requires Cloudflare Access and an allowed administrator email. Organization Portal supports Organization display-name management and Agent/Session management; it is not a multi-member invitation/roles console.
 
 ## Cloudflare resources (Devops account)
 
@@ -29,11 +29,13 @@ The homepage redirects to the Organization Portal. The Portal requires the user'
 
 The old V1 D1 (`company-notes-agent-address`, ID `2d811328-d89f-445b-87db-56690caed9df`) and OAuth KV (ID `0c1a8c89dc2a4e7ca81d4a5d3c7affa7`) are **not bound to V2**. They are retained for recovery/inspection; never apply the V2 migration to the V1 D1. The previous OAuth logins and credentials do not automatically migrate to V2.
 
+The unused, empty Preview Worker, D1 and KV were retired after the official release succeeded. Do not use a Preview endpoint for ordinary testing of this production service.
+
 ## Release workflow
 
 The production source is the reviewed `feat/agent-session-identity-v2-20261112` branch until a deliberate merge, with the deployment workflow `.github/workflows/production-v2.yml`.
 
-1. The release is triggered by an explicit change to `deploy/production-release.txt` or to `production-v2.yml` on that branch, not by every feature commit.
+1. The release is triggered by an explicit change to `deploy/production-release.txt` or to `production-v2.yml` on that branch, not by every feature commit. The legacy `main` branch still holds V1 code, but its `.github/workflows/deploy.yml` **deploy** job is disabled to prevent accidentally overwriting the live V2 Worker. Never re-enable it until `main` is deliberately migrated to a V2-only release workflow.
 2. GitHub Actions runs backend typecheck, CODE_PRINCIPLES style check, Worker/D1 scenario tests, browser E2E against local OAuth and D1, and Admin UI build.
 3. It checks the exact Cloudflare account, Worker name, D1 ID, KV ID, and custom domain. Wrong bindings fail closed.
 4. It runs a production D1 schema guard, then applies V2 migration to `company-notes-agent-address-v2` only.
@@ -61,3 +63,7 @@ The automated production smoke does **not** create user accounts or prove a full
 - Preserve MailTrigger unchanged: it is Relay's external SMTP/webhook transport, not part of Agent Address identity.
 - If rollback is necessary, **code rollback alone will not revert D1/KV bindings or schema**. Explicitly select the old Worker code, old D1 and old OAuth KV together, and audit identity tokens before restoring service.
 - Do not merge Relay API/MCP/Gateway drafts solely because Agent Address V2 is live: each requires isolated contract and end-to-end tests.
+
+## Verified November 12, 2026 deployment
+
+The official Worker was published by [production Actions run 43204806808](https://github.com/company-notes/agent-address/actions/runs/43204806808), version `ae60c6ad-aff4-4124-8664-50b9759fcc5f`. Both the official custom domain and workers.dev origin passed the read-only V2 smoke: OAuth authorization-server and MCP resource metadata 200; anonymous Account and Agent APIs 401; homepage redirect to the Organization Portal; Portal and assets 200; Cloudflare Access-protected Admin on the custom domain; old V1 Account route 404. Cloudflare API independently verified the official Worker binds the new production V2 D1 and OAuth KV. The V2 D1 was initially empty, so existing V1 users must register new V2 credentials. The real-world, user-driven OAuth sign-up and MCP continuity after reconnect/refresh remain to be tested and should not be overstated.
