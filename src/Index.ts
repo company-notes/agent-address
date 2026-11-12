@@ -25,6 +25,10 @@ class ApplicationRouter {
     const path = new URL(request.url).pathname;
 
     try {
+      if (path === '/' && (request.method === 'GET' || request.method === 'HEAD')) {
+        return Response.redirect(new URL('/portal/', request.url), 302);
+      }
+
       if (path === '/admin/api' || path.startsWith('/admin/api/')) {
         return await new AdminController(env).handle(request);
       }
