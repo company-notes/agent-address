@@ -1,6 +1,6 @@
 # Agent Address：Agent／Session 身分與定址架構
 
-> **文件定位：目標架構與領域規則。** 本文是後續資料模型、API（程式對外提供的操作介面）、MCP（Model Context Protocol，讓 AI 應用呼叫工具的協定）與組織管理介面的設計依據，**不是目前已上線功能的說明**。現有系統仍以 Host（機器／執行環境的名稱）與 Work（該環境底下的工作地址）分類；實作現況以 [README](../README.md) 和 [OpenAPI](openapi.yaml) 為準。
+> **文件定位：Agent Address V2 的領域架構與實作規則。** 本文統一資料模型、API（程式對外提供的操作介面）、MCP（Model Context Protocol，讓 AI 應用呼叫工具的協定）與組織管理介面的身分語意。所有新實作採用 Organization／Agent／Session；實際契約以 [OpenAPI](openapi.yaml) 與 [README](../README.md) 為準。
 
 ## 1. Agent Address 要解決什麼問題？
 
@@ -190,28 +190,19 @@ Portal 應從組織整體往下呈現：Organization → Agent 清單 → Agent 
 
 **登入組織 ≠ 取得每一個執行中的 Agent Session 的執行權。** 管理員對名稱、停用、撤銷的管理權與 Runtime 的 Session 使用權，必須在授權模型中區分。
 
-現行資料庫的 `accounts.org_id` 有 `UNIQUE` 限制，一個組織最多綁定一個帳號；這只是**目前實作的限制**，不是新架構永久的產品規則。未來若允許多位組織成員，需以明確的成員／角色授權模型擴充，不能用一組共享組織密碼代替。
+Organization 的帳號與權限應由明確的成員／角色授權模型管理；若第一版僅支援單一擁有者，必須明示限制，不得以共用帳號或單純知道地址取得其他 Agent／Session 的執行權。
 
-## 9. 舊 Host／Work 與新 Agent／Session 的過渡
+## 9. V2 實作邊界與一致性要求
 
-目前已部署的模型來自早期跨機器工作場景：`Organization / Host / Work`。資料表 `addresses` 使用 `parent_address_id` 表示上下層，`enrollments` 使用 `host_handle`，現有 MCP 工具、REST／Account API 和 Work Directory 也採用舊語意。
+Agent Address V2 只使用 **Organization／Agent／Session** 作為身分模型。機器、作業系統、Bot 平台與進程位置屬於 Runtime 或傳輸整合資訊，不能進入身分階層。
 
-| 舊概念 | 在新模型中的定位 |
-| --- | --- |
-| Organization | 保留，仍是歸屬與授權範圍 |
-| Host | 原本是機器／環境命名空間；**不能無條件一對一改名成 Agent**，機器轉為 Runtime 資訊 |
-| Work | 原本是 Host 下的工作地址；需逐筆釐清如何轉成 Agent 與 Session |
-| Host 的憑證與 Enrollment | 需重新界定 Agent 身分驗證及 Runtime 使用授權，不宜只更改欄位名稱 |
-| Work Directory | 目標改為以 Agent 為主要查詢單位，Session 作為其下層；現有查詢不得被默默改成不同意義 |
-| `org/host/work` 地址 | 與新 `org/agent/session` 雖都是三段字串，**語意不同，不能在不轉換資料的前提下視為同一種地址** |
-
-遷移的硬性要求：
-
-- **不可全域搜尋取代 Host→Agent、Work→Session 就當作完成。** 要確認舊資料、憑證持有者、Resume 行為與對外 API。
-- 不修改已套用的 D1 migration（D1 是現行 Cloudflare SQL 資料庫；migration 是一次性的結構變更檔）；新資料結構一律採新增 migration，並有真實 D1 測試。
-- 既有地址、OAuth／MCP／REST 客戶端及外部訊息整合需要有可驗證的相容或明確遷移策略，不能靜默重新解釋舊地址。
-- UI、API Controller、授權及領域核心維持分層。核心判定 Agent／Session 身分；各種 Bot 或 MCP 整合只轉交明確的登記與恢復意圖。
-- 實作遵循專案的 [CODE_PRINCIPLES.md](../CODE_PRINCIPLES.md)，特別是職責分離、不要吞例外、避免無必要的 defensive programming，以及 Rule 20 的語意分組。
+- **單一領域語意：** 資料表、API、MCP、Portal 與文件都使用 Agent／Session 的實際意義，不建立同一功能的兩套命名或雙路徑。
+- **身分與使用權分離：** Agent／Session 的不可變 ID、可命名的 Handle，以及 Runtime 的執行憑證各有不同用途；更改名稱不會授予 Session 執行權。
+- **對外契約統一：** HTTP API 採 V2，MCP 與 UI 呼叫同一組領域操作，不各自實作註冊、Resume 或授權判斷；語意改變時直接定義正確的新契約。
+- **資料結構乾淨：** D1 依新的身分模型建立 schema 與 migration，在隔離環境驗證；不得直接在未核實的正式資料庫上執行破壞性操作，也不能把不同語意的資料當成 V2 身分。
+- **服務責任清楚：** Agent Address 負責身分、解析與授權；Nuwa Relay 等通訊服務負責 Message、Thread、Handoff、投遞和 Conversation Binding。信箱或 Gateway 映射不決定 Canonical Address。
+- **只維護現行程式：** 不保留已淘汰設計的程式碼、額外介面、雙軌邏輯或修訂流水帳；歷史以 Git 追溯。
+- **工程品質與驗證：** 遵循 [CODE_PRINCIPLES.md](../CODE_PRINCIPLES.md)，包含職責分離、明確錯誤和 Rule 20 語意分組；以真實 D1／OAuth／MCP 整合測試驗證身分與授權。
 
 ## 10. 必須通過的行為驗收
 
@@ -222,7 +213,7 @@ Portal 應從組織整體往下呈現：Organization → Agent 清單 → Agent 
 5. **部分命名：** 只給 Agent 名、只給 Session 名、兩個都給或都不給，最終一律取得完整三層地址；模糊的自然語言命名不猜產品類型。
 6. **重複接管：** Windows 持有的 Session 尚有效時，Mac 請求使用同一個地址必須被拒絕；另建「FFL Dev Mac」地址後可以正常使用，原身分不變。
 7. **跨組織隔離：** 一個組織的帳號不得管理或恢復其他組織的 Agent／Session，知道地址也不能繞過驗證。
-8. **相容性：** 遷移期間原有 Host／Work 客戶端不得因語意改寫而無預警指向別的身分。
+8. **V2 契約一致性：** HTTP API、MCP、Portal 與通訊整合共用 Agent／Session 身分與授權語意，不接受另一種身分階層或已淘汰參數。
 9. **對話連續性：** A 反覆以 B 的 Agent 名稱傳送訊息時，在既有對話綁定下能維持原來的接收 Session，且不混入其他發送者的上下文。
 
 ## 11. 實作前尚待具體設計的事項
@@ -231,8 +222,8 @@ Portal 應從組織整體往下呈現：Organization → Agent 清單 → Agent 
 
 - Agent／Session 身分如何持久化，以及 Resume 的授權證明、撤銷與失效判斷。
 - Runtime 目前使用權的紀錄、有效期限與重啟後恢復規則；首版不允許同時接管。
-- Display Name 與地址 Handle 的正規化、重名處理及改名相容性。
+- Display Name 與地址 Handle 的正規化、重名處理，以及改名後身分 ID 與解析結果的一致性。
 - Conversation Binding 的唯一識別、隔離方式與由哪個服務保管；不要把訊息傳輸邏輯塞進身分核心。
-- 舊資料的確切映射、地址別名／API 相容方式，以及 Organization 多帳號成員權限的導入順序。
+- Organization 多帳號成員與角色授權的導入順序，以及 API、MCP、Portal 和 Relay 對 Session 執行權的共同驗證方式。
 
-**判斷每項實作是否正確的標準，不是能不能把舊 Host／Work 改名，而是能不能讓不同型態的 Agent 安全取得、辨識、恢復與使用自己的三層地址。**
+**判斷每項實作是否正確的標準，是不同型態的 Agent 能否安全取得、辨識、恢復與使用自己的三層地址，且所有介面遵循一致的 V2 身分與授權語意。**
