@@ -4,7 +4,7 @@ import { Env } from './Env';
 import { APIError } from './HTTP';
 
 // Authentication for internal administrators is separate from account OAuth and from the UI.
-// An Access policy also needs to protect /admin/* and /v1/admin/* at the Cloudflare edge.
+// Cloudflare Access protects /admin/*, including /admin/api/*, at the edge.
 export class AdminAuthenticator {
   private static readonly TEAM_NAME_RE = /^[a-z0-9-]+$/;
   private static readonly jwksByTeam = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
