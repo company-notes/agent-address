@@ -46,6 +46,10 @@ async function verifyOrigin(origin, checkAdminShell) {
   const agents = await get(origin, '/v2/account/agents');
   assert.equal(agents.status, 401, 'Agent directory must require OAuth.');
 
+  const homepage = await get(origin, '/');
+  assert.equal(homepage.status, 302, 'Home page must direct users to Organization Portal.');
+  assert.equal(homepage.headers.get('location'), origin + '/portal/');
+
   const portal = await get(origin, '/portal/');
   assert.equal(portal.status, 200, 'Organization Portal must be public before OAuth login.');
   const html = await portal.text();
