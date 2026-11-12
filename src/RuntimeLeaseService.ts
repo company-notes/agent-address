@@ -77,8 +77,8 @@ export class RuntimeLeaseService {
     const result = await this.db.prepare(
       `UPDATE session_runtime_leases
           SET refreshed_at = ?, expires_at = ?
-        WHERE session_id = ? AND runtime_token_hash = ?`,
-    ).bind(now.toISOString(), expiresAt, sessionID, tokenHash).run();
+        WHERE session_id = ? AND runtime_token_hash = ? AND expires_at > ?`,
+    ).bind(now.toISOString(), expiresAt, sessionID, tokenHash, now.toISOString()).run();
 
     if (result.meta.changes !== 1) {
       throw new APIError(409, 'runtime_not_owner', 'This Runtime no longer owns the Session.');

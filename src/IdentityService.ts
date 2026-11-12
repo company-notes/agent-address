@@ -1,6 +1,5 @@
-import { AccountService } from './Accounts';
 import { APIError, RequestData } from './HTTP';
-import { OrganizationRow, RegistryService } from './RegistryService';
+import { OrganizationRow, OrganizationService } from './Organizations';
 import { RuntimeLeaseService } from './RuntimeLeaseService';
 import { TokenService } from './Tokens';
 
@@ -71,8 +70,8 @@ export class IdentityService {
     SELECT a.id, a.org_id AS orgId, a.handle, a.display_name AS displayName,
            a.created_at AS createdAt,
            s.id AS defaultSessionID, s.handle AS defaultSessionHandle
-      FROM agent_identities a
-      LEFT JOIN agent_sessions s ON s.agent_id = a.id
+      FROM agents a
+      LEFT JOIN sessions s ON s.agent_id = a.id
            AND s.is_default = 1 AND s.archived_at IS NULL
   `;
 
@@ -81,13 +80,13 @@ export class IdentityService {
            a.display_name AS agentDisplayName, s.handle AS sessionHandle,
            s.display_name AS sessionDisplayName, s.is_default AS isDefault,
            s.created_at AS createdAt
-      FROM agent_sessions s
-      JOIN agent_identities a ON a.id = s.agent_id
+      FROM sessions s
+      JOIN agents a ON a.id = s.agent_id
   `;
 
   constructor(
     private readonly db: D1Database,
-    private readonly accounts: AccountService,
+    private readonly organizations: OrganizationService,
     private readonly leases: RuntimeLeaseService,
   ) {}
 
@@ -114,9 +113,7 @@ export class IdentityService {
   }
 
   private async organization(accountID: string): Promise<OrganizationRow> {
-    const account = await this.accounts.getAccount(accountID);
-
-    return this.accounts.requireOrganization(account);
+    return this.organizations.getForAccount(accountID);
   }
 
   private async requireAgent(orgID: string, agentID: string): Promise<AgentRow> {
@@ -147,7 +144,7 @@ export class IdentityService {
   }
 
   private static duplicateName(error: unknown): never {
-    if (RegistryService.isUniqueViolation(error)) {
+    if (String(error).includes('UNIQUE constraint failed')) {
       console.debug('Agent or Session handle already exists:', error);
 
       throw new APIError(409, 'identity_name_taken', 'That Agent or Session name is already in use.');
@@ -168,12 +165,12 @@ export class IdentityService {
     const lease = await this.leases.prepareInitialLease(sessionID, input.runtimeLabel ?? null);
 
     const agentInsert = this.db.prepare(
-      `INSERT INTO agent_identities (id, org_id, handle, display_name, created_at)
+      `INSERT INTO agents (id, org_id, handle, display_name, created_at)
        VALUES (?, ?, ?, ?, ?)`,
     ).bind(agentID, org.id, agentHandle, input.agentDisplayName ?? null, createdAt);
 
     const sessionInsert = this.db.prepare(
-      `INSERT INTO agent_sessions
+      `INSERT INTO sessions
          (id, agent_id, handle, display_name, is_default, resume_token_hash, created_at)
        VALUES (?, ?, ?, ?, 1, ?, ?)`,
     ).bind(sessionID, agentID, sessionHandle, input.sessionDisplayName ?? null, resumeHash, createdAt);
@@ -218,7 +215,7 @@ export class IdentityService {
     const lease = await this.leases.prepareInitialLease(sessionID, input.runtimeLabel ?? null);
 
     const sessionInsert = this.db.prepare(
-      `INSERT INTO agent_sessions
+      `INSERT INTO sessions
          (id, agent_id, handle, display_name, is_default, resume_token_hash, created_at)
        VALUES (?, ?, ?, ?, 0, ?, ?)`,
     ).bind(sessionID, agent.id, sessionHandle, input.sessionDisplayName ?? null, resumeHash, createdAt);
@@ -320,7 +317,7 @@ export class IdentityService {
     const session = await this.requireSession(org.id, sessionID);
     const tokenHash = await TokenService.sha256Hex(resumeToken);
     const valid = await this.db.prepare(
-      'SELECT id FROM agent_sessions WHERE id = ? AND resume_token_hash = ? AND archived_at IS NULL',
+      'SELECT id FROM sessions WHERE id = ? AND resume_token_hash = ? AND archived_at IS NULL',
     ).bind(sessionID, tokenHash).first<{ id: string }>();
 
     if (!valid) {

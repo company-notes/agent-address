@@ -57,12 +57,7 @@ export class AuthorizeController {
     }
 
     const registrationKey = AuthorizeController.field(form, 'registrationKey') || null;
-    const linkSlug = AuthorizeController.field(form, 'linkOrganization').trim();
-    const linkedOrganization = linkSlug
-      ? await this.services.accounts.verifyOrganizationToken(linkSlug, AuthorizeController.field(form, 'linkToken').trim())
-      : null;
-
-    return this.services.accounts.signUp(email, password, registrationKey, linkedOrganization);
+    return this.services.accounts.signUp(email, password, registrationKey);
   }
 
   private async parseAuthRequest(request: Request): Promise<AuthRequest> {

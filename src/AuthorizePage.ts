@@ -133,13 +133,7 @@ export class AuthorizePage {
       <label for="su-password">Password (10+ characters)</label>
       <input id="su-password" name="password" type="password" autocomplete="new-password" minlength="10" required>
       ${registrationKey}
-      <details>
-        <summary>Already have an organization token?</summary>
-        <label for="su-org">Organization</label>
-        <input id="su-org" name="linkOrganization" autocomplete="off">
-        <label for="su-token">Organization token</label>
-        <input id="su-token" name="linkToken" type="password" autocomplete="off">
-      </details>
+
       <button type="submit">Create account</button>
     </form>`;
   }
