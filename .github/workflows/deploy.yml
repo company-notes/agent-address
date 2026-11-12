@@ -66,7 +66,9 @@ jobs:
 
   deploy:
     name: Deploy to Cloudflare
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    # Legacy main workflow keeps verifying code but must never redeploy V1 over live V2.
+    # Production releases come exclusively from production-v2.yml.
+    if: ${{ false }}
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 20
