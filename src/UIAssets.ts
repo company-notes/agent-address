@@ -4,6 +4,10 @@ import type { Env } from './Env';
 // Cloudflare Access protects the internal /admin/ entrypoint at the edge.
 export class UIAssets {
   static matches(pathname: string): boolean {
+    if (pathname === '/admin/api' || pathname.startsWith('/admin/api/')) {
+      return false;
+    }
+
     return pathname === '/admin' ||
       pathname.startsWith('/admin/') ||
       pathname === '/portal' ||

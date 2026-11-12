@@ -25,7 +25,7 @@ class ApplicationRouter {
     const path = new URL(request.url).pathname;
 
     try {
-      if (path.startsWith('/admin/api/')) {
+      if (path === '/admin/api' || path.startsWith('/admin/api/')) {
         return await new AdminController(env).handle(request);
       }
 
