@@ -16,6 +16,33 @@ describe('identity account API boundaries', () => {
     expect(unlinked.body.error.code).toBe('no_organization');
   });
 
+  it('accepts only resource-based Runtime claims and rejects retired action endpoints', async () => {
+    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
+    await client.registerOrganization(accessToken, TestClient.uniqueName('resources'));
+
+    const retiredClaim = await client.call('POST', '/v2/account/agents/claim', {
+      token: accessToken,
+      body: { agentName: 'obsolete' },
+    });
+    expect(retiredClaim.status).toBe(404);
+
+    const agent = await client.createAgent(accessToken, 'current', 'main');
+    expect(agent.status).toBe(201);
+
+    const sessionID = agent.body.data.session.id;
+    const oldLease = await client.call('POST', `/v2/account/sessions/${sessionID}/heartbeat`, {
+      token: accessToken,
+      body: { runtimeToken: agent.body.data.runtimeToken },
+    });
+    expect(oldLease.status).toBe(404);
+
+    const renewed = await client.call('PATCH', `/v2/account/sessions/${sessionID}/runtime-lease`, {
+      token: accessToken,
+      body: { runtimeToken: agent.body.data.runtimeToken },
+    });
+    expect(renewed.status).toBe(200);
+  });
+
   it('supports a named Agent with a default Session and additional Sessions', async () => {
     const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
     const slug = TestClient.uniqueName('team');
