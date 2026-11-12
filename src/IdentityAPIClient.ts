@@ -15,7 +15,7 @@ export class IdentityAPIClient {
   ) {}
 
   async call<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const headers = body === undefined ? {} : { 'content-type': 'application/json' };
+    const headers: HeadersInit = body === undefined ? {} : { 'content-type': 'application/json' };
     const request = new Request(`https://account.internal${path}`, {
       method,
       headers,
