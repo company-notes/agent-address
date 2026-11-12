@@ -1,4 +1,4 @@
-import { APIError } from './HTTP';
+import { ApplicationError } from './ApplicationError';
 import { TokenService } from './Tokens';
 
 export type InitialLease = {
@@ -63,7 +63,7 @@ export class RuntimeLeaseService {
     ).run();
 
     if (result.meta.changes !== 1) {
-      throw new APIError(
+      throw new ApplicationError(
         409,
         'session_in_use',
         'This Session already has an active Runtime. Use a new Agent/Session address instead.',
@@ -86,7 +86,7 @@ export class RuntimeLeaseService {
     ).bind(now.toISOString(), expiresAt, sessionID, tokenHash, now.toISOString()).run();
 
     if (result.meta.changes !== 1) {
-      throw new APIError(409, 'runtime_not_owner', 'This Runtime no longer owns the Session.');
+      throw new ApplicationError(409, 'runtime_not_owner', 'This Runtime no longer owns the Session.');
     }
 
     return { expiresAt };
@@ -103,7 +103,7 @@ export class RuntimeLeaseService {
     ).bind(now, now, sessionID, tokenHash, now).run();
 
     if (result.meta.changes !== 1) {
-      throw new APIError(409, 'runtime_not_owner', 'This Runtime no longer owns an active Session lease.');
+      throw new ApplicationError(409, 'runtime_not_owner', 'This Runtime no longer owns an active Session lease.');
     }
   }
 }

@@ -1,4 +1,5 @@
-import { APIError, RequestData } from './HTTP';
+import { ApplicationError } from './ApplicationError';
+import { IdentityNames } from './IdentityNames';
 
 export type OrganizationRow = {
   id: string;
@@ -19,7 +20,7 @@ export class OrganizationService {
     ).bind(id).first<OrganizationRow>();
 
     if (!organization) {
-      throw new APIError(404, 'organization_not_found', 'Organization not found.');
+      throw new ApplicationError(404, 'organization_not_found', 'Organization not found.');
     }
 
     return organization;
@@ -32,14 +33,14 @@ export class OrganizationService {
     ).bind(accountID).first<OrganizationRow>();
 
     if (!organization) {
-      throw new APIError(409, 'no_organization', 'Register your Organization first.');
+      throw new ApplicationError(409, 'no_organization', 'Register your Organization first.');
     }
 
     return organization;
   }
 
   async register(accountID: string, requestedSlug: string, displayName: string): Promise<OrganizationRow> {
-    const slug = RequestData.normalizeOrgSlug(requestedSlug);
+    const slug = IdentityNames.organizationSlug(requestedSlug);
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
 
@@ -48,11 +49,11 @@ export class OrganizationService {
     ).bind(accountID).first<{ orgID: string | null }>();
 
     if (!existing) {
-      throw new APIError(401, 'invalid_account', 'Account no longer exists.');
+      throw new ApplicationError(401, 'invalid_account', 'Account no longer exists.');
     }
 
     if (existing.orgID) {
-      throw new APIError(409, 'account_has_organization', 'Account already belongs to an Organization.');
+      throw new ApplicationError(409, 'account_has_organization', 'Account already belongs to an Organization.');
     }
 
     const record = this.db.prepare(
@@ -67,12 +68,12 @@ export class OrganizationService {
       const [, updated] = await this.db.batch([record, assignOwner]);
 
       if (updated.meta.changes !== 1) {
-        throw new APIError(409, 'account_has_organization', 'Account already belongs to an Organization.');
+        throw new ApplicationError(409, 'account_has_organization', 'Account already belongs to an Organization.');
       }
     } catch (error) {
       if (String(error).includes('UNIQUE constraint failed: organizations.slug')) {
         console.debug('Organization handle collision:', error);
-        throw new APIError(409, 'organization_name_taken', 'Organization name is already registered.');
+        throw new ApplicationError(409, 'organization_name_taken', 'Organization name is already registered.');
       }
 
       throw error;

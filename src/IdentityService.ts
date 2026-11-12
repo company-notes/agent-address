@@ -1,4 +1,5 @@
-import { APIError, RequestData } from './HTTP';
+import { ApplicationError } from './ApplicationError';
+import { IdentityNames } from './IdentityNames';
 import { OrganizationRow, OrganizationService } from './Organizations';
 import { RuntimeLeaseService } from './RuntimeLeaseService';
 import { TokenService } from './Tokens';
@@ -100,7 +101,7 @@ export class IdentityService {
   }
 
   private static handle(value: string | undefined, prefix: string): string {
-    return RequestData.normalizeHandle(value ?? this.newHandle(prefix));
+    return IdentityNames.handle(value ?? this.newHandle(prefix));
   }
 
   private static publicSession(orgSlug: string, row: SessionRow): PublicSession {
@@ -121,7 +122,7 @@ export class IdentityService {
     if (String(error).includes('UNIQUE constraint failed')) {
       console.debug('Agent or Session handle collision:', error);
 
-      throw new APIError(409, 'identity_name_taken', 'That Agent or Session name is already in use.');
+      throw new ApplicationError(409, 'identity_name_taken', 'That Agent or Session name is already in use.');
     }
 
     throw error;
@@ -138,7 +139,7 @@ export class IdentityService {
     ).bind(orgID, agentID).first<AgentRow>();
 
     if (!agent) {
-      throw new APIError(404, 'agent_not_found', 'Agent not found in your Organization.');
+      throw new ApplicationError(404, 'agent_not_found', 'Agent not found in your Organization.');
     }
 
     return agent;
@@ -152,7 +153,7 @@ export class IdentityService {
     ).bind(orgID, sessionID).first<SessionRow>();
 
     if (!session) {
-      throw new APIError(404, 'session_not_found', 'Session not found in your Organization.');
+      throw new ApplicationError(404, 'session_not_found', 'Session not found in your Organization.');
     }
 
     return session;
@@ -318,14 +319,14 @@ export class IdentityService {
 
   async resolve(accountID: string, address: string): Promise<PublicSession> {
     const org = await this.organization(accountID);
-    const segments = RequestData.normalizePath(address).split('/');
+    const segments = IdentityNames.path(address).split('/');
 
     if (segments.length !== 2 && segments.length !== 3) {
-      throw new APIError(400, 'invalid_address', 'Use organization/agent or organization/agent/session.');
+      throw new ApplicationError(400, 'invalid_address', 'Use organization/agent or organization/agent/session.');
     }
 
     if (segments[0] !== org.slug) {
-      throw new APIError(403, 'wrong_organization', 'Address belongs to another Organization.');
+      throw new ApplicationError(403, 'wrong_organization', 'Address belongs to another Organization.');
     }
 
     const sessionCondition = segments.length === 3
@@ -343,7 +344,7 @@ export class IdentityService {
       : await statement.bind(org.id, segments[1]).first<SessionRow>();
 
     if (!row) {
-      throw new APIError(404, 'session_not_found', 'Agent or Session address not found.');
+      throw new ApplicationError(404, 'session_not_found', 'Agent or Session address not found.');
     }
 
     return IdentityService.publicSession(org.slug, row);
@@ -363,7 +364,7 @@ export class IdentityService {
     ).bind(sessionID, tokenHash).first<{ id: string }>();
 
     if (!valid) {
-      throw new APIError(403, 'invalid_resume_token', 'Resume credential does not match the Session.');
+      throw new ApplicationError(403, 'invalid_resume_token', 'Resume credential does not match the Session.');
     }
 
     const lease = await this.leases.resume(sessionID, runtimeLabel);

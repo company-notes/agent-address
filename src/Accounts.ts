@@ -1,4 +1,4 @@
-import { APIError } from './HTTP';
+import { ApplicationError } from './ApplicationError';
 
 export type AccountRow = {
   id: string;
@@ -54,7 +54,7 @@ export class PasswordHasher {
 
   static async createCredentials(password: string): Promise<{ salt: string; hash: string }> {
     if (password.length < this.MIN_LENGTH) {
-      throw new APIError(400, 'weak_password', `Password must be at least ${this.MIN_LENGTH} characters.`);
+      throw new ApplicationError(400, 'weak_password', `Password must be at least ${this.MIN_LENGTH} characters.`);
     }
 
     const salt = this.createSalt();
@@ -99,12 +99,12 @@ export class AccountService {
 
   async signUp(email: string, password: string, registrationKey: string | null): Promise<AccountRow> {
     if (this.registrationKey && registrationKey !== this.registrationKey) {
-      throw new APIError(403, 'registration_closed', 'Sign-up requires a valid registration key.');
+      throw new ApplicationError(403, 'registration_closed', 'Sign-up requires a valid registration key.');
     }
 
     const normalized = email.trim().toLowerCase();
     if (normalized.length > 254 || !AccountService.EMAIL_RE.test(normalized)) {
-      throw new APIError(400, 'invalid_email', 'Enter a valid email address.');
+      throw new ApplicationError(400, 'invalid_email', 'Enter a valid email address.');
     }
 
     const id = crypto.randomUUID();
@@ -119,7 +119,7 @@ export class AccountService {
     } catch (error) {
       if (String(error).includes('UNIQUE constraint failed: accounts.email')) {
         console.debug('Account email collision:', error);
-        throw new APIError(409, 'account_exists', 'An account with that email already exists.');
+        throw new ApplicationError(409, 'account_exists', 'An account with that email already exists.');
       }
 
       throw error;
@@ -137,7 +137,7 @@ export class AccountService {
     const valid = await PasswordHasher.verify(password, salt, row?.passwordHash ?? '');
 
     if (!row || !valid) {
-      throw new APIError(401, 'invalid_credentials', 'Email or password is incorrect.');
+      throw new ApplicationError(401, 'invalid_credentials', 'Email or password is incorrect.');
     }
 
     return AccountService.publicAccount(row);
@@ -149,7 +149,7 @@ export class AccountService {
     ).bind(id).first<AccountCredentialRow>();
 
     if (!row) {
-      throw new APIError(401, 'invalid_account', 'Account no longer exists.');
+      throw new ApplicationError(401, 'invalid_account', 'Account no longer exists.');
     }
 
     return AccountService.publicAccount(row);
@@ -159,7 +159,7 @@ export class AccountService {
     const account = await this.getAccount(accountID);
 
     if (account.authVersion !== authVersion) {
-      throw new APIError(401, 'authorization_revoked', 'This account must sign in again.');
+      throw new ApplicationError(401, 'authorization_revoked', 'This account must sign in again.');
     }
   }
 }
