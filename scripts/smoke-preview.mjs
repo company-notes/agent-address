@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Read-only smoke against the isolated V2 Preview Worker. Never talks to production.
 import assert from 'node:assert/strict';
+import { setTimeout } from 'node:timers/promises';
 
 const origin = process.env.AGENT_ADDRESS_V2_PREVIEW_URL;
 
@@ -19,8 +20,28 @@ async function request(path) {
   return response;
 }
 
-const metadata = await request('/.well-known/oauth-authorization-server');
-assert.equal(metadata.status, 200, 'OAuth metadata must be available');
+// A freshly created workers.dev hostname may not be globally active
+// the instant Wrangler finishes. Retry only the discovery readiness probe.
+let metadata;
+
+for (let attempt = 0; attempt < 20; attempt++) {
+  metadata = await request('/.well-known/oauth-authorization-server');
+
+  if (metadata.status === 200 || metadata.status !== 404) {
+    break;
+  }
+
+  await setTimeout(3000);
+}
+
+if (metadata.status !== 200) {
+  const body = (await metadata.text()).slice(0, 300);
+  console.error('OAuth readiness diagnostic: content-type=' +
+    (metadata.headers.get('content-type') ?? '(none)') +
+    ', response=' + body);
+
+  throw new Error('Preview OAuth discovery unavailable: HTTP ' + metadata.status);
+}
 const oauth = await metadata.json();
 assert(oauth.authorization_endpoint?.startsWith(origin + '/authorize'));
 assert(oauth.token_endpoint?.startsWith(origin + '/token'));
