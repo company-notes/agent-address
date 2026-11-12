@@ -45,16 +45,21 @@ export class RuntimeLeaseService {
     const tokenHash = await TokenService.sha256Hex(runtimeToken);
 
     const result = await this.db.prepare(
-      `UPDATE session_runtime_leases
-          SET runtime_token_hash = ?, runtime_label = ?, refreshed_at = ?, expires_at = ?
-        WHERE session_id = ? AND expires_at <= ?`,
+      `INSERT INTO session_runtime_leases
+        (session_id, runtime_token_hash, runtime_label, refreshed_at, expires_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(session_id) DO UPDATE SET
+          runtime_token_hash = excluded.runtime_token_hash,
+          runtime_label = excluded.runtime_label,
+          refreshed_at = excluded.refreshed_at,
+          expires_at = excluded.expires_at
+        WHERE session_runtime_leases.expires_at <= excluded.refreshed_at`,
     ).bind(
+      sessionID,
       tokenHash,
       runtimeLabel,
       now.toISOString(),
       expiresAt,
-      sessionID,
-      now.toISOString(),
     ).run();
 
     if (result.meta.changes !== 1) {
