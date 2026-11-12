@@ -3,7 +3,7 @@
 import { execFileSync } from 'node:child_process';
 
 class D1CutoverGuard {
-  static readonly CURRENT_TABLES = [
+  static CURRENT_TABLES = [
     'accounts',
     'admin_audit',
     'agents',
@@ -12,7 +12,7 @@ class D1CutoverGuard {
     'sessions',
   ];
 
-  static readonly SQLITE_QUERY =
+  static SQLITE_QUERY =
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name";
 
   static getMode(args) {
