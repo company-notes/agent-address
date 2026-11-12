@@ -30,6 +30,10 @@ class MCPTestSession {
     return (await this.client.listTools()).tools.map((tool) => tool.name);
   }
 
+  async listToolDefinitions() {
+    return (await this.client.listTools()).tools;
+  }
+
   async call(name: string, args: Record<string, unknown> = {}): Promise<ToolResult> {
     const response = await this.client.callTool({ name, arguments: args });
     const text = (response.content as { text: string }[])[0].text;
@@ -54,6 +58,7 @@ describe('real MCP client authenticates through OAuth and uses the shared API', 
     const slug = TestClient.uniqueName('mcp');
 
     expect(await session.listToolNames()).toEqual(expect.arrayContaining([
+      'agentAddressEnsureIdentity',
       'agentAddressGetStatus',
       'agentAddressRegisterOrganization',
       'agentAddressClaimAgent',
@@ -113,12 +118,10 @@ describe('real MCP client authenticates through OAuth and uses the shared API', 
     expect(first.isError).toBe(false);
     await session.call('agentAddressReleaseRuntime');
 
-    const resumed = await session.call('agentAddressResumeSession', {
-      address: `${slug}/coder/ffl-dev`,
-      resumeToken: first.data.resumeToken,
-    });
+    const resumed = await session.call('agentAddressResumeSession');
     expect(resumed.isError).toBe(false);
     expect(resumed.data.session.id).toBe(first.data.session.id);
+    expect(resumed.text).not.toMatch(/runtimeToken|resumeToken|runtime_|resume_/);
 
     await session.call('agentAddressReleaseRuntime');
     await session.close();
@@ -235,9 +238,10 @@ describe('real MCP client authenticates through OAuth and uses the shared API', 
   it('never includes Runtime or Resume credentials in model-facing tool definitions', async () => {
     const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
     const session = await MCPTestSession.connect(accessToken);
-    const schema = (await session.listToolNames()).join(' ');
+    const schema = JSON.stringify(await session.listToolDefinitions());
 
     expect(schema).toContain('agentAddressEnsureIdentity');
+    expect(schema).not.toMatch(/resumeToken|runtimeToken|signingSecret/);
     expect(schema).not.toContain('agentAddressResumeWithToken');
 
     await session.close();
