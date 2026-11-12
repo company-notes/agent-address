@@ -56,51 +56,46 @@ class CloudflareResourceResolver {
 
 const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
 const apiToken = process.env.CLOUDFLARE_API_TOKEN;
-const d1Value = process.env.CLOUDFLARE_D1_DATABASE_ID;
-const kvValue = process.env.CLOUDFLARE_OAUTH_KV_ID;
+const configuredName = (process.env.CLOUDFLARE_D1_DATABASE_NAME || '').trim();
 const envFile = process.env.GITHUB_ENV;
 
-if (!accountId || !apiToken || !d1Value || !kvValue || !envFile) {
+if (!accountId || !apiToken || !envFile) {
   throw new Error('Missing Cloudflare configuration or GITHUB_ENV');
 }
 
-const resolver = new CloudflareResourceResolver(accountId, apiToken);
-const overrides = [];
-
-if (!/^[a-f0-9]{32}$/i.test(kvValue)) {
-  const id = await resolver.resolve(kvValue, {
-    kind: 'KV namespace',
-    endpoint: '/storage/kv/namespaces',
-    field: 'title',
-    idField: 'id',
-    perPage: 1000,
-    searchByName: false,
-  });
-
-  overrides.push('CLOUDFLARE_OAUTH_KV_ID=' + id);
+if (configuredName && configuredName !== 'company-notes-agent-address') {
+  throw new Error('GitHub CLOUDFLARE_D1_DATABASE_NAME must identify the original Agent Address database.');
 }
 
-if (!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(d1Value)) {
-  const configuredName = (process.env.CLOUDFLARE_D1_DATABASE_NAME || '').trim();
-  if (configuredName && configuredName !== d1Value) {
-    throw new Error('CLOUDFLARE_D1_DATABASE_NAME must match the resolved D1 name');
-  }
+const resolver = new CloudflareResourceResolver(accountId, apiToken);
 
-  const id = await resolver.resolve(d1Value, {
+// Resolve canonical resource names instead of trusting stale GitHub ID variables.
+// Existing GitHub Secrets/Variables remain the single deployment entrypoint;
+// this step verifies Cloudflare's actual IDs and overrides only this workflow job.
+const [d1Id, kvId] = await Promise.all([
+  resolver.resolve('company-notes-agent-address', {
     kind: 'D1 database',
     endpoint: '/d1/database',
     field: 'name',
     idField: 'uuid',
     perPage: 1000,
     searchByName: true,
-  });
+  }),
+  resolver.resolve('OAUTH_KV', {
+    kind: 'KV namespace',
+    endpoint: '/storage/kv/namespaces',
+    field: 'title',
+    idField: 'id',
+    perPage: 1000,
+    searchByName: false,
+  }),
+]);
 
-  overrides.push('CLOUDFLARE_D1_DATABASE_ID=' + id);
-  overrides.push('CLOUDFLARE_D1_DATABASE_NAME=' + d1Value);
-}
+const overrides = [
+  'CLOUDFLARE_D1_DATABASE_ID=' + d1Id,
+  'CLOUDFLARE_D1_DATABASE_NAME=company-notes-agent-address',
+  'CLOUDFLARE_OAUTH_KV_ID=' + kvId,
+];
 
-if (overrides.length > 0) {
-  await appendFile(envFile, overrides.join('\n') + '\n');
-}
-
-console.log('Cloudflare D1 and KV identifiers are ready.');
+await appendFile(envFile, overrides.join('\n') + '\n');
+console.log('Verified canonical Agent Address D1 and OAuth KV by exact Cloudflare name.');
