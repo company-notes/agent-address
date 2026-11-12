@@ -48,7 +48,7 @@ const configure = async () => {
   await TestProcess.run(process.execPath, ['scripts/prepare-deploy.mjs']);
   await TestProcess.run('npx', [
     'wrangler', 'd1', 'migrations', 'apply', 'DB',
-    '--local', '--config', '.wrangler.deploy.jsonc', '--yes',
+    '--local', '--config', '.wrangler.deploy.jsonc',
   ]);
 };
 
