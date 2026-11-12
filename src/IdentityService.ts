@@ -50,10 +50,13 @@ export type PublicSession = {
   createdAt: string;
 };
 
-export type ClaimedIdentity = {
+export type RegisteredIdentity = {
   session: PublicSession;
-  runtimeToken: string;
   resumeToken: string;
+};
+
+export type ClaimedIdentity = RegisteredIdentity & {
+  runtimeToken: string;
   leaseExpiresAt: string;
 };
 
@@ -63,8 +66,10 @@ export type ResumedIdentity = {
   leaseExpiresAt: string;
 };
 
-// Domain model for Organization -> Agent -> Session.
-// Knows nothing about HTTP routes, OAuth, MCP or product-specific runtime types.
+type PreparedIdentity = RegisteredIdentity & {
+  statements: D1PreparedStatement[];
+};
+
 export class IdentityService {
   private static readonly AGENT_SELECT = `
     SELECT a.id, a.org_id AS orgId, a.handle, a.display_name AS displayName,
@@ -112,7 +117,17 @@ export class IdentityService {
     };
   }
 
-  private async organization(accountID: string): Promise<OrganizationRow> {
+  private static duplicateName(error: unknown): never {
+    if (String(error).includes('UNIQUE constraint failed')) {
+      console.debug('Agent or Session handle collision:', error);
+
+      throw new APIError(409, 'identity_name_taken', 'That Agent or Session name is already in use.');
+    }
+
+    throw error;
+  }
+
+  private organization(accountID: string): Promise<OrganizationRow> {
     return this.organizations.getForAccount(accountID);
   }
 
@@ -143,17 +158,7 @@ export class IdentityService {
     return session;
   }
 
-  private static duplicateName(error: unknown): never {
-    if (String(error).includes('UNIQUE constraint failed')) {
-      console.debug('Agent or Session handle already exists:', error);
-
-      throw new APIError(409, 'identity_name_taken', 'That Agent or Session name is already in use.');
-    }
-
-    throw error;
-  }
-
-  async createAgent(accountID: string, input: NewAgentInput): Promise<ClaimedIdentity> {
+  private async prepareAgent(accountID: string, input: NewAgentInput): Promise<PreparedIdentity> {
     const org = await this.organization(accountID);
     const agentID = crypto.randomUUID();
     const sessionID = crypto.randomUUID();
@@ -162,24 +167,17 @@ export class IdentityService {
     const createdAt = new Date().toISOString();
     const resumeToken = TokenService.randomToken('resume');
     const resumeHash = await TokenService.sha256Hex(resumeToken);
-    const lease = await this.leases.prepareInitialLease(sessionID, input.runtimeLabel ?? null);
 
-    const agentInsert = this.db.prepare(
+    const insertAgent = this.db.prepare(
       `INSERT INTO agents (id, org_id, handle, display_name, created_at)
        VALUES (?, ?, ?, ?, ?)`,
     ).bind(agentID, org.id, agentHandle, input.agentDisplayName ?? null, createdAt);
 
-    const sessionInsert = this.db.prepare(
+    const insertSession = this.db.prepare(
       `INSERT INTO sessions
          (id, agent_id, handle, display_name, is_default, resume_token_hash, created_at)
        VALUES (?, ?, ?, ?, 1, ?, ?)`,
     ).bind(sessionID, agentID, sessionHandle, input.sessionDisplayName ?? null, resumeHash, createdAt);
-
-    try {
-      await this.db.batch([agentInsert, sessionInsert, lease.statement]);
-    } catch (error) {
-      IdentityService.duplicateName(error);
-    }
 
     const row: SessionRow = {
       id: sessionID,
@@ -194,77 +192,121 @@ export class IdentityService {
 
     return {
       session: IdentityService.publicSession(org.slug, row),
-      runtimeToken: lease.runtimeToken,
       resumeToken,
-      leaseExpiresAt: lease.expiresAt,
+      statements: [insertAgent, insertSession],
     };
   }
 
-  async createSession(
+  private async prepareSession(
     accountID: string,
     agentID: string,
     input: NewSessionInput,
-  ): Promise<ClaimedIdentity> {
+  ): Promise<PreparedIdentity> {
     const org = await this.organization(accountID);
     const agent = await this.requireAgent(org.id, agentID);
     const sessionID = crypto.randomUUID();
-    const sessionHandle = IdentityService.handle(input.sessionName, 'session');
+    const handle = IdentityService.handle(input.sessionName, 'session');
     const resumeToken = TokenService.randomToken('resume');
     const resumeHash = await TokenService.sha256Hex(resumeToken);
     const createdAt = new Date().toISOString();
-    const lease = await this.leases.prepareInitialLease(sessionID, input.runtimeLabel ?? null);
 
-    const sessionInsert = this.db.prepare(
+    const statement = this.db.prepare(
       `INSERT INTO sessions
          (id, agent_id, handle, display_name, is_default, resume_token_hash, created_at)
        VALUES (?, ?, ?, ?, 0, ?, ?)`,
-    ).bind(sessionID, agent.id, sessionHandle, input.sessionDisplayName ?? null, resumeHash, createdAt);
+    ).bind(sessionID, agentID, handle, input.sessionDisplayName ?? null, resumeHash, createdAt);
+
+    const row: SessionRow = {
+      id: sessionID,
+      agentId: agent.id,
+      agentHandle: agent.handle,
+      agentDisplayName: agent.displayName,
+      sessionHandle: handle,
+      sessionDisplayName: input.sessionDisplayName ?? null,
+      isDefault: 0,
+      createdAt,
+    };
+
+    return {
+      session: IdentityService.publicSession(org.slug, row),
+      resumeToken,
+      statements: [statement],
+    };
+  }
+
+  private async register(prepared: PreparedIdentity): Promise<RegisteredIdentity> {
+    try {
+      await this.db.batch(prepared.statements);
+    } catch (error) {
+      IdentityService.duplicateName(error);
+    }
+
+    return { session: prepared.session, resumeToken: prepared.resumeToken };
+  }
+
+  private async claim(prepared: PreparedIdentity, runtimeLabel: string | null): Promise<ClaimedIdentity> {
+    const lease = await this.leases.prepareInitialLease(prepared.session.id, runtimeLabel);
 
     try {
-      await this.db.batch([sessionInsert, lease.statement]);
+      await this.db.batch([...prepared.statements, lease.statement]);
     } catch (error) {
       IdentityService.duplicateName(error);
     }
 
     return {
-      session: IdentityService.publicSession(org.slug, {
-        id: sessionID,
-        agentId: agent.id,
-        agentHandle: agent.handle,
-        agentDisplayName: agent.displayName,
-        sessionHandle,
-        sessionDisplayName: input.sessionDisplayName ?? null,
-        isDefault: 0,
-        createdAt,
-      }),
+      session: prepared.session,
+      resumeToken: prepared.resumeToken,
       runtimeToken: lease.runtimeToken,
-      resumeToken,
       leaseExpiresAt: lease.expiresAt,
     };
   }
 
+  async registerAgent(accountID: string, input: NewAgentInput): Promise<RegisteredIdentity> {
+    return this.register(await this.prepareAgent(accountID, input));
+  }
+
+  async claimAgent(accountID: string, input: NewAgentInput): Promise<ClaimedIdentity> {
+    return this.claim(await this.prepareAgent(accountID, input), input.runtimeLabel ?? null);
+  }
+
+  async registerSession(
+    accountID: string,
+    agentID: string,
+    input: NewSessionInput,
+  ): Promise<RegisteredIdentity> {
+    return this.register(await this.prepareSession(accountID, agentID, input));
+  }
+
+  async claimSession(
+    accountID: string,
+    agentID: string,
+    input: NewSessionInput,
+  ): Promise<ClaimedIdentity> {
+    return this.claim(await this.prepareSession(accountID, agentID, input), input.runtimeLabel ?? null);
+  }
+
   async listAgents(accountID: string): Promise<AgentRow[]> {
     const org = await this.organization(accountID);
-    const response = await this.db.prepare(
+    const result = await this.db.prepare(
       `${IdentityService.AGENT_SELECT}
        WHERE a.org_id = ? AND a.archived_at IS NULL
        ORDER BY a.handle COLLATE NOCASE`,
     ).bind(org.id).all<AgentRow>();
 
-    return response.results;
+    return result.results;
   }
 
   async listSessions(accountID: string, agentID: string): Promise<PublicSession[]> {
     const org = await this.organization(accountID);
     await this.requireAgent(org.id, agentID);
 
-    const response = await this.db.prepare(
+    const result = await this.db.prepare(
       `${IdentityService.SESSION_SELECT}
        WHERE a.org_id = ? AND a.id = ? AND s.archived_at IS NULL
        ORDER BY s.is_default DESC, s.handle COLLATE NOCASE`,
     ).bind(org.id, agentID).all<SessionRow>();
 
-    return response.results.map((session) => IdentityService.publicSession(org.slug, session));
+    return result.results.map((session) => IdentityService.publicSession(org.slug, session));
   }
 
   async getSession(accountID: string, sessionID: string): Promise<PublicSession> {
