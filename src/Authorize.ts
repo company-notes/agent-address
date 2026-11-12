@@ -3,7 +3,7 @@ import type { AuthRequest } from '@cloudflare/workers-oauth-provider';
 import { AccountRow } from './Accounts';
 import { AuthorizePage, FormValues } from './AuthorizePage';
 import { Env } from './Env';
-import { APIError } from './HTTP';
+import { ApplicationError } from './ApplicationError';
 import { Services } from './Services';
 
 export type AccountProps = {
@@ -32,13 +32,13 @@ export class AuthorizeController {
       return JSON.parse(serialized) as AuthRequest;
     } catch (error) {
       console.debug('Malformed OAuth authorization form:', error);
-      throw new APIError(400, 'invalid_request', 'The authorization request is malformed.');
+      throw new ApplicationError(400, 'invalid_request', 'The authorization request is malformed.');
     }
   }
 
   private static parseIntent(value: string): 'signin' | 'signup' {
     if (value !== 'signin' && value !== 'signup') {
-      throw new APIError(400, 'invalid_request', 'Unknown authorization form intent.');
+      throw new ApplicationError(400, 'invalid_request', 'Unknown authorization form intent.');
     }
 
     return value;
@@ -65,7 +65,7 @@ export class AuthorizeController {
       return await this.env.OAUTH_PROVIDER.parseAuthRequest(request);
     } catch (error) {
       console.debug('Invalid OAuth authorization request:', error);
-      throw new APIError(400, 'invalid_request', error instanceof Error ? error.message : 'Invalid authorization request.');
+      throw new ApplicationError(400, 'invalid_request', error instanceof Error ? error.message : 'Invalid authorization request.');
     }
   }
 
@@ -83,7 +83,7 @@ export class AuthorizeController {
     try {
       account = await this.authenticate(form, intent);
     } catch (error) {
-      if (!(error instanceof APIError)) {
+      if (!(error instanceof ApplicationError)) {
         throw error;
       }
 

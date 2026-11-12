@@ -1,6 +1,7 @@
 import { AccountAuthenticator } from './AccountAuthenticator';
 import { Env } from './Env';
-import { APIError, JSONRecord, RequestData, ResponseData } from './HTTP';
+import { ApplicationError } from './ApplicationError';
+import { JSONRecord, RequestData, ResponseData } from './HTTP';
 import { NewAgentInput, NewSessionInput } from './IdentityService';
 import { Services } from './Services';
 
@@ -27,7 +28,7 @@ export class IdentityController {
     const [, , resource, identifier, action] = segments;
 
     if (segments[0] !== 'v2' || segments[1] !== 'account') {
-      throw new APIError(404, 'not_found', 'Identity API endpoint not found.');
+      throw new ApplicationError(404, 'not_found', 'Identity API endpoint not found.');
     }
 
     if (method === 'GET' && resource === 'status' && segments.length === 3) {
@@ -111,13 +112,13 @@ export class IdentityController {
     if (method === 'GET' && resource === 'resolve' && segments.length === 3) {
       const address = url.searchParams.get('address');
       if (!address) {
-        throw new APIError(400, 'invalid_address', 'address query parameter is required.');
+        throw new ApplicationError(400, 'invalid_address', 'address query parameter is required.');
       }
 
       return ResponseData.ok(await this.services.identities.resolve(accountID, address));
     }
 
-    throw new APIError(404, 'not_found', 'Identity API endpoint not found.');
+    throw new ApplicationError(404, 'not_found', 'Identity API endpoint not found.');
   }
 
   private async sessionAction(
@@ -147,7 +148,7 @@ export class IdentityController {
       return ResponseData.ok(await this.services.identities.release(accountID, sessionID, runtimeToken));
     }
 
-    throw new APIError(404, 'not_found', 'Identity API endpoint not found.');
+    throw new ApplicationError(404, 'not_found', 'Identity API endpoint not found.');
   }
 
   private static newSessionInput(data: JSONRecord): NewSessionInput {

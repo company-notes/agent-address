@@ -1,7 +1,8 @@
 import { AdminAuthenticator } from './AdminAuth';
 import { AdminService } from './AdminService';
 import { Env } from './Env';
-import { APIError, RequestData, ResponseData } from './HTTP';
+import { ApplicationError } from './ApplicationError';
+import { RequestData, ResponseData } from './HTTP';
 import { Services } from './Services';
 
 export class AdminController {
@@ -19,7 +20,7 @@ export class AdminController {
 
     const value = Number(raw);
     if (!Number.isSafeInteger(value) || value < minimum || value > maximum) {
-      throw new APIError(400, 'invalid_pagination', 'Invalid pagination value.');
+      throw new ApplicationError(400, 'invalid_pagination', 'Invalid pagination value.');
     }
 
     return value;
@@ -34,7 +35,7 @@ export class AdminController {
     const method = request.method;
 
     if (segments[0] !== 'admin' || segments[1] !== 'api') {
-      throw new APIError(404, 'not_found', 'Administrator resource not found.');
+      throw new ApplicationError(404, 'not_found', 'Administrator resource not found.');
     }
 
     if (resource === 'accounts' && segments.length === 3 && method === 'GET') {
@@ -43,7 +44,7 @@ export class AdminController {
       const search = url.searchParams.get('search') ?? '';
 
       if (search.length > 80) {
-        throw new APIError(400, 'invalid_search', 'Search is too long.');
+        throw new ApplicationError(400, 'invalid_search', 'Search is too long.');
       }
 
       return ResponseData.ok(await this.admin.listAccounts(search, offset, limit));
@@ -59,12 +60,12 @@ export class AdminController {
 
       const data = await RequestData.readJSON(request);
       if (typeof data.password !== 'string' || data.password.length > 256) {
-        throw new APIError(400, 'invalid_password', 'A new password is required (maximum 256 characters).');
+        throw new ApplicationError(400, 'invalid_password', 'A new password is required (maximum 256 characters).');
       }
 
       return ResponseData.ok(await this.admin.resetPassword(accountID, data.password, actorEmail));
     }
 
-    throw new APIError(404, 'not_found', 'Administrator resource not found.');
+    throw new ApplicationError(404, 'not_found', 'Administrator resource not found.');
   }
 }

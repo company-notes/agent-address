@@ -4,7 +4,8 @@ import { UIAssets } from './UIAssets';
 import { AdminController } from './AdminController';
 import { AuthorizeController } from './Authorize';
 import { Env } from './Env';
-import { APIError, ResponseData } from './HTTP';
+import { ApplicationError } from './ApplicationError';
+import { ResponseData } from './HTTP';
 import { IdentityController } from './IdentityController';
 import { AddressMCP } from './MCP';
 
@@ -40,7 +41,7 @@ class ApplicationRouter {
         return await this.accountAPI(request, env);
       }
 
-      throw new APIError(404, 'not_found', 'Resource not found.');
+      throw new ApplicationError(404, 'not_found', 'Resource not found.');
     } catch (error) {
       const response = ResponseData.error(error);
       if (path.startsWith('/v2/account/')) {

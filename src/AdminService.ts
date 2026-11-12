@@ -1,5 +1,5 @@
 import { AccountService, PasswordHasher } from './Accounts';
-import { APIError } from './HTTP';
+import { ApplicationError } from './ApplicationError';
 import { OrganizationService } from './Organizations';
 
 export type AdminAccountRow = {
@@ -83,7 +83,7 @@ export class AdminService {
     ).bind(accountID).first<AdminAccountRow>();
 
     if (!account) {
-      throw new APIError(404, 'account_not_found', 'Account not found.');
+      throw new ApplicationError(404, 'account_not_found', 'Account not found.');
     }
 
     const audits = this.db.prepare(
@@ -155,7 +155,7 @@ export class AdminService {
     ]);
 
     if (changed.meta.changes !== 1) {
-      throw new APIError(404, 'account_not_found', 'Account no longer exists.');
+      throw new ApplicationError(404, 'account_not_found', 'Account no longer exists.');
     }
 
     return { id: accountID, passwordChanged: true };
