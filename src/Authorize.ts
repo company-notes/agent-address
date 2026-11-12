@@ -5,6 +5,7 @@ import { AuthorizePage, FormValues } from './AuthorizePage';
 import { Env } from './Env';
 import { ApplicationError } from './ApplicationError';
 import { Services } from './Services';
+import { RegistrationCredentials } from './RegistrationCredentials';
 
 export type AccountProps = {
   accountId: string;
@@ -55,6 +56,9 @@ export class AuthorizeController {
     if (intent === 'signin') {
       return this.services.accounts.logIn(email, password);
     }
+
+    const confirmation = AuthorizeController.field(form, 'passwordConfirmation');
+    RegistrationCredentials.confirm(password, confirmation);
 
     const registrationKey = AuthorizeController.field(form, 'registrationKey') || null;
     return this.services.accounts.signUp(email, password, registrationKey);
