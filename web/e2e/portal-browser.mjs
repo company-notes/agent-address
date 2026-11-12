@@ -127,8 +127,43 @@ try {
   await page.getByRole('button', { name: 'Create Session' }).click();
   await page.getByRole('heading', { name: slug + '/xiaoming/ffl-dev', exact: true }).waitFor({ timeout: 15000 });
 
+  // Change Organization and Agent display names and rename their address handles.
+  await page.getByLabel('Organization display name').fill('Portal E2E Renamed Team');
+  await page.getByRole('button', { name: 'Save Organization' }).click();
+  await page.getByRole('heading', { name: 'Portal E2E Renamed Team' }).waitFor();
+
+  await page.getByRole('button', { name: 'Edit Agent' }).first().click();
+  await page.getByLabel('Edit address handle').fill('xiaomei');
+  await page.getByLabel('Edit display name').fill('小美');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await page.getByRole('heading', { name: slug + '/xiaomei/main', exact: true }).waitFor();
+
+  await page.getByRole('button', { name: 'Edit Session' }).last().click();
+  await page.getByLabel('Edit address handle').fill('ffl-qa');
+  await page.getByLabel('Edit display name').fill('FFL QA');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await page.getByRole('heading', { name: slug + '/xiaomei/ffl-qa', exact: true }).waitFor();
+
+  // Switching the default lets us archive the old main without losing the Agent identity.
+  await page.getByRole('button', { name: 'Make Default' }).last().click();
+  await page.getByRole('button', { name: 'Archive Session' }).first().click();
+  await page.getByRole('button', { name: 'Archive Session' }).last().click();
+  await page.getByRole('heading', { name: slug + '/xiaomei/main', exact: true }).waitFor({
+    state: 'detached',
+  });
+
+  // Replacing the resume capability is explicit, and its new value appears only once.
+  await page.getByRole('button', { name: 'Rotate Resume Token' }).first().click();
+  await page.getByRole('button', { name: 'Rotate Token', exact: true }).click();
+  await page.getByText('Resume token replaced').waitFor();
+
+  await page.getByRole('button', { name: 'Archive Agent' }).first().click();
+  await page.getByRole('button', { name: 'Archive Agent' }).last().click();
+  await page.getByRole('button', { name: 'Edit Agent' }).waitFor({ state: 'detached' });
+  await page.getByText('Choose an Agent to inspect its Sessions.').waitFor();
+
   assert.deepEqual(pageErrors, [], 'Browser must have no uncaught script errors');
-  console.log('PASS: real Chromium + Worker + OAuth + D1 — Portal signup, Organization, Agent and Sessions');
+  console.log('PASS: real Chromium + Worker + OAuth + D1 — Portal signup, create, rename, default, rotate and archive');
 } finally {
   if (browser) {
     await browser.close();
