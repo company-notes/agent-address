@@ -101,7 +101,7 @@ MCP 是 Agent 與 Agent Address 互動的一種介面；其他整合也可使用
 
 ### 5.2 名稱可部分省略，不讓使用者被三層結構綁住
 
-登記介面在語意上要分開接受 `agentName` 與 `sessionName`（下列是概念欄位，**尚非現行 API 規格**）：
+登記介面在語意上要分開接受 `agentName` 與 `sessionName`（以下同時是現行 API 的明確欄位名稱）：
 
 | 提供的資料 | 目標行為 |
 | --- | --- |
@@ -127,7 +127,7 @@ Session handle：main            （自動建立的 Default Session）
 完整地址：nuwa/xiaoming/main
 ```
 
-**只有一個名字時，不得單憑「這是 Codex 還是 GrokBot」就決定它必然屬於 Agent 或 Session。** 應優先依使用者表達的意圖或明確參數判斷；真正歧義時才詢問。應用程式名稱、模型、作業系統與 Runtime 可以輔助產生友善的預設名字，但不能自動定義身分。
+只有 `agentName` 而沒有 `sessionName` 時，系統建立名為 `main` 的 Default Session；只指定 `sessionName` 則自動產生 Agent Handle。**不得單憑「這是 Codex 還是 GrokBot」就決定一個模糊名稱必然屬於 Agent 或 Session。** 應優先依使用者表達的意圖或明確參數判斷；真正歧義時才詢問。應用程式名稱、模型、作業系統與 Runtime 可以輔助產生友善的預設名字，但不能自動定義身分。
 
 人類可使用「FFL 開發」等顯示名稱；地址使用適合解析的識別字。**系統不得只回傳簡稱，讓使用者不知道自動產生的 Agent 名稱。**
 
@@ -219,14 +219,15 @@ Portal 應從組織整體往下呈現：Organization → Agent 清單 → Agent 
 8. **組織自助管理：** 組織管理者可以用相同 OAuth 帳號在 Portal 登入、建立 Agent／Session，但登記不會自動取得 Runtime 執行權。
 9. **對話連續性：** A 反覆以 B 的 Agent 名稱傳送訊息時，在既有對話綁定下能維持原來的接收 Session，且不混入其他發送者的上下文。
 
-## 11. 實作前尚待具體設計的事項
+## 11. 目前已確定的實作與整合邊界
 
-上述領域語意已確立；以下是需要技術設計與測試的細節，**本文件不預先假定已解決**：
+- **身份持久化：** D1 保存 Organization、Account、Agent、Session。Canonical Address 使用可變更的 Handle，內部 ID 不隨改名改變。改名後舊地址立即失效，不保留 alias。
+- **Default Session：** Agent 初次建立就有 Default Session；不指定 Session Handle 時使用 `main`。組織管理者可改指定其他 Session；不可直接停用仍是 Default 的 Session。
+- **恢復權限：** 建立／註冊發出只顯示一次的 Resume Token；在同 Organization 的 OAuth 權限及該 Token 皆合法的條件下，才能恢復 Session。組織管理者可輪替遺失的 Token，舊 Token 立即失效。
+- **Runtime 排他：** D1 單列 Lease、原子取得、續期與釋放；已被其他 Runtime 持有時拒絕接管。Agent／Session 停用會撤銷相應 Lease，失效 Session 無法繼續使用。
+- **管理權與執行權分離：** Organization Portal 登記身分不取得 Runtime Lease；只有 Claim 或合法 Resume 取得使用權。
+- **跨產品邊界：** Conversation Binding（A 與 B 的固定訊息 Session 對應）由訊息傳送層或獨立服務持有。Agent Address 提供身份查詢與解析，不保存訊息或私下建立 Relay 對話。
+- **資料庫切換：** 新建隔離 D1 並驗證後才能切換 Worker，絕不在已部署 Host／Work D1 上直接套用新版初始 Migration。詳見 [Database cutover runbook](deployment-cutover.md)。
+- **後續獨立功能：** 若組織要有多個人類帳號／角色，需額外定義成員授權模型；不可用本版本一帳號一組織的限制假裝已有成員管理。
 
-- Agent／Session 身分如何持久化，以及 Resume 的授權證明、撤銷與失效判斷。
-- Runtime 目前使用權的紀錄、有效期限與重啟後恢復規則；首版不允許同時接管。
-- Display Name 與地址 Handle 的正規化、重名處理及改名相容性。
-- Conversation Binding 的唯一識別、隔離方式與由哪個服務保管；不要把訊息傳輸邏輯塞進身分核心。
-- 新資料庫的正式切換、現有資料如何處理，以及 Organization 多帳號成員權限的導入順序。
-
-**判斷每項實作是否正確的標準，是能不能讓不同型態的 Agent 安全取得、辨識、恢復與使用自己的三層地址，而不是依賴執行程式或機器來推定身分。**
+**架構驗收的標準，是不同類型的 Agent 都能安全取得、命名、恢復與撤銷固定的三層地址，且不把模型、Bot 程式或 Runtime 混成身分。**

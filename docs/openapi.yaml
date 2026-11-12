@@ -17,6 +17,10 @@ paths:
         '200': { description: Account identity and Organization }
         '401': { description: OAuth authorization required }
   /v2/account/organization:
+    patch:
+      summary: Update Organization display name
+      responses:
+        '200': { description: Updated Organization }
     post:
       summary: Register Organization for the signed-in account
       requestBody:
@@ -60,6 +64,28 @@ paths:
       responses:
         '201': { description: Agent/Session identity and resume/runtime capabilities }
         '409': { description: Name conflict or no Organization }
+  /v2/account/agents/{agentID}:
+    parameters:
+      - $ref: '#/components/parameters/agentID'
+    patch:
+      summary: Change the Agent handle or display name; old address is not retained
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                agentName: { type: string }
+                agentDisplayName: { type: [string, 'null'] }
+      responses:
+        '200': { description: Updated Agent }
+        '409': { description: Agent name is already in use }
+    delete:
+      summary: Archive Agent and all Sessions; revoke active Runtime leases
+      responses:
+        '200': { description: Agent archived }
+        '404': { description: Agent does not belong to current Organization }
   /v2/account/agents/{agentID}/sessions:
     parameters:
       - $ref: '#/components/parameters/agentID'
@@ -95,10 +121,42 @@ paths:
     parameters:
       - $ref: '#/components/parameters/sessionID'
     get:
-      summary: Read one Session identity
+      summary: Read one Session identity and non-sensitive Runtime state
       responses:
         '200': { description: Session identity }
         '404': { description: Not found or not in this Organization }
+    patch:
+      summary: Change Session handle or display name without changing its identity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sessionName: { type: string }
+                sessionDisplayName: { type: [string, 'null'] }
+      responses:
+        '200': { description: Updated Session with canonical address }
+    delete:
+      summary: Archive non-default Session and revoke its Runtime lease
+      responses:
+        '200': { description: Session archived }
+        '409': { description: Assign another Default Session first }
+  /v2/account/sessions/{sessionID}/default:
+    parameters:
+      - $ref: '#/components/parameters/sessionID'
+    put:
+      summary: Set the Agent's Default Session
+      responses:
+        '200': { description: Default Session changed atomically }
+  /v2/account/sessions/{sessionID}/rotate-resume:
+    parameters:
+      - $ref: '#/components/parameters/sessionID'
+    post:
+      summary: Replace an existing Session's private resume capability
+      responses:
+        '200': { description: New one-time Resume Token; existing Runtime lease remains active }
   /v2/account/sessions/{sessionID}/resume:
     parameters:
       - $ref: '#/components/parameters/sessionID'
