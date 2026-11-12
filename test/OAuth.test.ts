@@ -36,8 +36,44 @@ describe('OAuth', () => {
     expect(response.status).toBe(200);
     expect(response.headers.get('x-frame-options')).toBe('DENY');
     expect(html).toContain('Sign in');
+    expect(html).toContain('id="su-confirm-password"');
+    expect(html).toContain('name="passwordConfirmation"');
     expect(html).toContain('Registration key');
     expect(JSON.parse(oauthRequest).clientId).toBe(flow.clientId);
+  });
+
+  it('requires matching registration passwords before creating an Account', async () => {
+    const flow = new OAuthTestFlow();
+    await flow.registerClient();
+    const { oauthRequest } = await flow.openLoginPage();
+    const email = `${TestClient.uniqueName('confirmation')}@example.com`;
+
+    const mismatch = await flow.submitLogin({
+      intent: 'signup', email, password,
+      passwordConfirmation: 'a-different-private-password',
+      registrationKey: TestClient.REGISTRATION_KEY,
+    }, oauthRequest);
+
+    expect(mismatch.status).toBe(400);
+    expect(await mismatch.text()).toContain('Passwords do not match');
+    expect(mismatch.headers.get('location')).toBeNull();
+
+    const missing = await flow.submitLogin({
+      intent: 'signup', email, password,
+      registrationKey: TestClient.REGISTRATION_KEY,
+    }, oauthRequest);
+
+    expect(missing.status).toBe(400);
+    expect(await missing.text()).toContain('Confirm your password');
+
+    const success = await flow.submitLogin({
+      intent: 'signup', email, password,
+      passwordConfirmation: password,
+      registrationKey: TestClient.REGISTRATION_KEY,
+    }, oauthRequest);
+
+    expect(success.status).toBe(302);
+    expect(success.headers.get('location')).toContain('code=');
   });
 
   it('creates an account and issues tokens through the code flow', async () => {
