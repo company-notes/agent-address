@@ -1,16 +1,30 @@
 import { Alert, Button, Card, Col, Layout, Row, Space, Spin, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 
-import type { AccountStatus, Agent, IdentityRegistration, Session } from './PortalAPI';
+import type {
+  AccountStatus,
+  Agent,
+  AgentChanges,
+  IdentityRegistration,
+  Session,
+  SessionChanges,
+} from './PortalAPI';
 import { PortalAPI } from './PortalAPI';
+import { EditingIdentity, PortalEditor } from './PortalEditor';
 import { PortalOAuth } from './PortalOAuth';
 import {
   AgentRegistryCard,
-  IdentityCreatedNotice,
+  IdentitySecretNotice,
+  OrganizationOverviewCard,
   OrganizationRegistrationCard,
   SessionRegistryCard,
 } from './PortalSections';
 import type { AgentFields, OrganizationFields, SessionFields } from './PortalSections';
+
+type SecretNotice = {
+  identity: IdentityRegistration;
+  rotated: boolean;
+};
 
 export function PortalApp() {
   const [token, setToken] = useState<string | null>(null);
@@ -18,7 +32,8 @@ export function PortalApp() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [identity, setIdentity] = useState<IdentityRegistration | null>(null);
+  const [secret, setSecret] = useState<SecretNotice | null>(null);
+  const [editing, setEditing] = useState<EditingIdentity | null>(null);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,9 +83,9 @@ export function PortalApp() {
 
   async function selectAgent(agent: Agent): Promise<void> {
     await action(async () => {
-      setSelectedAgent(agent);
       setSessions(await PortalAPI.sessions(agent.id));
-      setIdentity(null);
+      setSelectedAgent(agent);
+      setSecret(null);
     });
   }
 
@@ -81,25 +96,102 @@ export function PortalApp() {
     });
   }
 
+  async function updateOrganization(displayName: string): Promise<void> {
+    await action(async () => {
+      await PortalAPI.updateOrganization(displayName.trim());
+      await refresh();
+    });
+  }
+
   async function createAgent(fields: AgentFields): Promise<void> {
     await action(async () => {
-      setIdentity(await PortalAPI.createAgent(
+      const identity = await PortalAPI.createAgent(
         fields.agentName?.trim() ?? '',
         fields.sessionName?.trim() ?? '',
-      ));
+        fields.agentDisplayName?.trim() ?? '',
+        fields.sessionDisplayName?.trim() ?? '',
+      );
+      setSecret({ identity, rotated: false });
 
+      await refresh();
+    });
+  }
+
+  async function updateAgent(agentID: string, changes: AgentChanges): Promise<void> {
+    await action(async () => {
+      const updated = await PortalAPI.updateAgent(agentID, changes);
+      setEditing(null);
+
+      if (selectedAgent?.id === agentID) {
+        setSelectedAgent(updated);
+        setSessions(await PortalAPI.sessions(agentID));
+      }
+
+      await refresh();
+    });
+  }
+
+  async function archiveAgent(agentID: string): Promise<void> {
+    await action(async () => {
+      await PortalAPI.archiveAgent(agentID);
+
+      if (selectedAgent?.id === agentID) {
+        setSelectedAgent(null);
+        setSessions([]);
+      }
+
+      setSecret(null);
       await refresh();
     });
   }
 
   async function createSession(agentID: string, fields: SessionFields): Promise<void> {
     await action(async () => {
-      setIdentity(await PortalAPI.createSession(
+      const identity = await PortalAPI.createSession(
         agentID,
         fields.newSessionName?.trim() ?? '',
-      ));
+        fields.newSessionDisplayName?.trim() ?? '',
+      );
+      setSecret({ identity, rotated: false });
 
       setSessions(await PortalAPI.sessions(agentID));
+    });
+  }
+
+  async function updateSession(sessionID: string, changes: SessionChanges): Promise<void> {
+    await action(async () => {
+      const updated = await PortalAPI.updateSession(sessionID, changes);
+      setEditing(null);
+      setSessions(await PortalAPI.sessions(updated.agentId));
+      await refresh();
+    });
+  }
+
+  async function setDefaultSession(sessionID: string): Promise<void> {
+    await action(async () => {
+      const updated = await PortalAPI.setDefaultSession(sessionID);
+      setSessions(await PortalAPI.sessions(updated.agentId));
+      await refresh();
+    });
+  }
+
+  async function archiveSession(sessionID: string): Promise<void> {
+    await action(async () => {
+      await PortalAPI.archiveSession(sessionID);
+
+      if (selectedAgent) {
+        setSessions(await PortalAPI.sessions(selectedAgent.id));
+      }
+
+      setSecret(null);
+    });
+  }
+
+  async function rotateResumeToken(sessionID: string): Promise<void> {
+    await action(async () => {
+      const result = await PortalAPI.rotateResumeToken(sessionID);
+      const session = await PortalAPI.getSession(sessionID);
+      setSecret({ identity: { session, resumeToken: result.resumeToken }, rotated: true });
     });
   }
 
@@ -110,7 +202,8 @@ export function PortalApp() {
     setAgents([]);
     setSessions([]);
     setSelectedAgent(null);
-    setIdentity(null);
+    setEditing(null);
+    setSecret(null);
   }
 
   return (
@@ -156,11 +249,11 @@ export function PortalApp() {
                 />
               ) : (
                 <>
-                  <Card title={status.organization.displayName}>
-                    <Typography.Text type="secondary">
-                      Organization: {status.organization.slug}
-                    </Typography.Text>
-                  </Card>
+                  <OrganizationOverviewCard
+                    organization={status.organization}
+                    loading={working}
+                    onUpdate={(displayName) => void updateOrganization(displayName)}
+                  />
 
                   <Row gutter={[16, 16]}>
                     <Col xs={24} md={12}>
@@ -169,6 +262,8 @@ export function PortalApp() {
                         loading={working}
                         onSelect={(agent) => void selectAgent(agent)}
                         onCreate={(fields) => void createAgent(fields)}
+                        onEdit={setEditingAgent}
+                        onArchive={(agentID) => void archiveAgent(agentID)}
                       />
                     </Col>
 
@@ -178,11 +273,31 @@ export function PortalApp() {
                         sessions={sessions}
                         loading={working}
                         onCreate={(agentID, fields) => void createSession(agentID, fields)}
+                        onEdit={(session) => setEditing({ kind: 'session', session })}
+                        onDefault={(sessionID) => void setDefaultSession(sessionID)}
+                        onArchive={(sessionID) => void archiveSession(sessionID)}
+                        onRotate={(sessionID) => void rotateResumeToken(sessionID)}
                       />
                     </Col>
                   </Row>
 
-                  {identity && <IdentityCreatedNotice identity={identity} />}
+                  {secret && (
+                    <IdentitySecretNotice
+                      identity={secret.identity}
+                      rotated={secret.rotated}
+                      onClose={() => setSecret(null)}
+                    />
+                  )}
+
+                  {editing && (
+                    <PortalEditor
+                      target={editing}
+                      loading={working}
+                      onCancel={() => setEditing(null)}
+                      onSaveAgent={(id, changes) => void updateAgent(id, changes)}
+                      onSaveSession={(id, changes) => void updateSession(id, changes)}
+                    />
+                  )}
                 </>
               )}
             </>
@@ -191,4 +306,8 @@ export function PortalApp() {
       </Layout.Content>
     </Layout>
   );
+
+  function setEditingAgent(agent: Agent): void {
+    setEditing({ kind: 'agent', agent });
+  }
 }
