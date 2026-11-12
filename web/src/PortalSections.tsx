@@ -1,6 +1,6 @@
-import { Alert, Button, Card, Divider, Form, Input, List, Typography } from 'antd';
+import { Alert, Button, Card, Divider, Form, Input, List, Popconfirm, Space, Tag, Typography } from 'antd';
 
-import type { Agent, IdentityRegistration, Session } from './PortalAPI';
+import type { Agent, IdentityRegistration, Organization, Session } from './PortalAPI';
 
 export type OrganizationFields = {
   slug: string;
@@ -10,10 +10,13 @@ export type OrganizationFields = {
 export type AgentFields = {
   agentName?: string;
   sessionName?: string;
+  agentDisplayName?: string;
+  sessionDisplayName?: string;
 };
 
 export type SessionFields = {
   newSessionName?: string;
+  newSessionDisplayName?: string;
 };
 
 export function OrganizationRegistrationCard({
@@ -42,16 +45,51 @@ export function OrganizationRegistrationCard({
   );
 }
 
+export function OrganizationOverviewCard({
+  organization,
+  loading,
+  onUpdate,
+}: {
+  organization: Organization;
+  loading: boolean;
+  onUpdate: (displayName: string) => void;
+}) {
+  return (
+    <Card title={organization.displayName}>
+      <Typography.Paragraph type="secondary">
+        Organization: {organization.slug}
+      </Typography.Paragraph>
+
+      <Form
+        key={organization.id}
+        layout="inline"
+        initialValues={{ displayName: organization.displayName }}
+        onFinish={(fields: { displayName: string }) => onUpdate(fields.displayName)}
+      >
+        <Form.Item name="displayName" label="Display name" rules={[{ required: true }]}>
+          <Input aria-label="Organization display name" />
+        </Form.Item>
+
+        <Button htmlType="submit" loading={loading}>Save Organization</Button>
+      </Form>
+    </Card>
+  );
+}
+
 export function AgentRegistryCard({
   agents,
   loading,
   onSelect,
   onCreate,
+  onEdit,
+  onArchive,
 }: {
   agents: Agent[];
   loading: boolean;
   onSelect: (agent: Agent) => void;
   onCreate: (fields: AgentFields) => void;
+  onEdit: (agent: Agent) => void;
+  onArchive: (agentID: string) => void;
 }) {
   return (
     <Card title="Your Agents">
@@ -61,9 +99,20 @@ export function AgentRegistryCard({
         renderItem={(agent) => (
           <List.Item
             actions={[
-              <Button key={agent.id} onClick={() => onSelect(agent)}>
+              <Button key="sessions" onClick={() => onSelect(agent)}>
                 Sessions
               </Button>,
+              <Button key="edit" onClick={() => onEdit(agent)}>Edit Agent</Button>,
+              <Popconfirm
+                key="archive"
+                title="Archive this Agent?"
+                description="All Sessions will be archived and their Runtime leases revoked."
+                okText="Archive Agent"
+                okButtonProps={{ danger: true }}
+                onConfirm={() => onArchive(agent.id)}
+              >
+                <Button danger disabled={loading}>Archive Agent</Button>
+              </Popconfirm>,
             ]}
           >
             <List.Item.Meta
@@ -83,8 +132,16 @@ export function AgentRegistryCard({
           <Input placeholder="xiaoming" />
         </Form.Item>
 
+        <Form.Item name="agentDisplayName" label="Agent display name (optional)">
+          <Input placeholder="小明" />
+        </Form.Item>
+
         <Form.Item name="sessionName" label="Default Session handle (optional)">
           <Input placeholder="main" />
+        </Form.Item>
+
+        <Form.Item name="sessionDisplayName" label="Default Session display name (optional)">
+          <Input placeholder="主要對話" />
         </Form.Item>
 
         <Button htmlType="submit" loading={loading}>
@@ -100,11 +157,19 @@ export function SessionRegistryCard({
   sessions,
   loading,
   onCreate,
+  onEdit,
+  onDefault,
+  onArchive,
+  onRotate,
 }: {
   agent: Agent | null;
   sessions: Session[];
   loading: boolean;
   onCreate: (agentID: string, fields: SessionFields) => void;
+  onEdit: (session: Session) => void;
+  onDefault: (sessionID: string) => void;
+  onArchive: (sessionID: string) => void;
+  onRotate: (sessionID: string) => void;
 }) {
   return (
     <Card title={agent ? `Sessions: ${agent.handle}` : 'Sessions'}>
@@ -114,10 +179,48 @@ export function SessionRegistryCard({
             dataSource={sessions}
             rowKey="id"
             renderItem={(session) => (
-              <List.Item>
+              <List.Item
+                actions={[
+                  <Button key="edit" onClick={() => onEdit(session)}>Edit Session</Button>,
+                  <Button
+                    key="default"
+                    disabled={loading || session.isDefault}
+                    onClick={() => onDefault(session.id)}
+                  >
+                    Make Default
+                  </Button>,
+                  <Popconfirm
+                    key="rotate"
+                    title="Replace this Session's resume token?"
+                    description="The previous resume token will stop working immediately."
+                    okText="Rotate Token"
+                    onConfirm={() => onRotate(session.id)}
+                  >
+                    <Button disabled={loading}>Rotate Resume Token</Button>
+                  </Popconfirm>,
+                  <Popconfirm
+                    key="archive"
+                    title="Archive this Session?"
+                    description="This permanently revokes its Runtime lease and resume capability."
+                    okText="Archive Session"
+                    okButtonProps={{ danger: true }}
+                    onConfirm={() => onArchive(session.id)}
+                  >
+                    <Button danger disabled={loading || session.isDefault}>Archive Session</Button>
+                  </Popconfirm>,
+                ]}
+              >
                 <List.Item.Meta
                   title={session.canonical}
-                  description={session.isDefault ? 'Default Session' : session.displayName}
+                  description={
+                    <Space wrap>
+                      {session.displayName && <Typography.Text>{session.displayName}</Typography.Text>}
+                      {session.isDefault && <Tag color="blue">Default Session</Tag>}
+                      {session.runtime
+                        ? <Tag color="green">Active Runtime: {session.runtime.label ?? 'Unnamed'}</Tag>
+                        : <Tag>Available</Tag>}
+                    </Space>
+                  }
                 />
               </List.Item>
             )}
@@ -128,6 +231,10 @@ export function SessionRegistryCard({
           <Form layout="vertical" onFinish={(fields: SessionFields) => onCreate(agent.id, fields)}>
             <Form.Item name="newSessionName" label="New Session handle (optional)">
               <Input placeholder="ffl-dev" />
+            </Form.Item>
+
+            <Form.Item name="newSessionDisplayName" label="New Session display name (optional)">
+              <Input placeholder="FFL 開發" />
             </Form.Item>
 
             <Button htmlType="submit" loading={loading}>
@@ -144,15 +251,26 @@ export function SessionRegistryCard({
   );
 }
 
-export function IdentityCreatedNotice({ identity }: { identity: IdentityRegistration }) {
+export function IdentitySecretNotice({
+  identity,
+  rotated,
+  onClose,
+}: {
+  identity: IdentityRegistration;
+  rotated: boolean;
+  onClose: () => void;
+}) {
   return (
     <Alert
       type="success"
       showIcon
-      message={'Created ' + identity.session.canonical}
+      closable
+      onClose={onClose}
+      message={rotated ? 'Resume token replaced' : 'Created ' + identity.session.canonical}
       description={
         <div>
-          <p>Save this one-time resume capability securely. A Runtime may use it to acquire the Session.</p>
+          <p>Save this one-time resume token securely. A Runtime needs it to resume this Session.</p>
+          <p>Session: <code>{identity.session.canonical}</code></p>
           <p>Resume token: <code>{identity.resumeToken}</code></p>
         </div>
       }
