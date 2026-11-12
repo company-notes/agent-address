@@ -23,8 +23,8 @@ export class RequestData {
     let data: unknown;
     try {
       data = await request.json();
-    } catch (error) {
-      console.debug('Invalid JSON request body:', error);
+    } catch {
+      // The API error boundary reports only the sanitized error code.
       throw new ApplicationError(400, 'invalid_json', 'Request body must be a JSON object.');
     }
 
@@ -101,7 +101,7 @@ export class ResponseData {
       );
     }
 
-    console.error('Unexpected API exception:', error);
+    console.error('Unexpected API exception:', error instanceof Error ? error.name : typeof error);
 
     return this.json(
       {
