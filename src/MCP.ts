@@ -150,22 +150,31 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
     this.server.registerTool(
       'agentAddressResumeSession',
       {
-        description: 'Resume an existing Agent Session with its private resume token. Refuses active Runtime conflicts.',
+        description: 'Resume by Session ID or canonical address with its private resume token; refuses active Runtime conflicts.',
         inputSchema: {
-          sessionID: z.string(),
+          sessionID: z.string().optional(),
+          address: z.string().optional(),
           resumeToken: z.string(),
           runtimeLabel: z.string().optional(),
         },
       },
-      async ({ sessionID, resumeToken, runtimeLabel }) => {
+      async ({ sessionID, address, resumeToken, runtimeLabel }) => {
         await this.assertUnclaimed();
 
+        if (Boolean(sessionID) === Boolean(address)) {
+          throw new Error('Provide either a Session ID or an Agent/Session address, not both.');
+        }
+
+        const targetID = sessionID ?? (await this.api.call<PublicSession>(
+          'GET',
+          `/v2/account/resolve?address=${encodeURIComponent(address!)}`,
+        )).id;
         const resumed = await this.api.call<ResumedIdentity>(
           'POST',
-          `/v2/account/sessions/${encodeURIComponent(sessionID)}/resume`,
+          `/v2/account/sessions/${encodeURIComponent(targetID)}/resume`,
           { resumeToken, runtimeLabel },
         );
-        await this.rememberIdentity(sessionID, resumed.runtimeToken);
+        await this.rememberIdentity(targetID, resumed.runtimeToken);
 
         return AddressMCP.textResult(resumed);
       },
@@ -221,6 +230,27 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
     );
   }
 
+  private registerForgetLocal(): void {
+    this.server.registerTool(
+      'agentAddressForgetLocalSession',
+      {
+        description: 'Clear this MCP connection\'s saved Session identity after it was revoked externally. ' +
+          'Does not release an active remote Runtime lease; call agentAddressReleaseRuntime first if possible.',
+      },
+      async () => {
+        const sessionID = await this.requireSessionID();
+        await this.ctx.storage.delete(AddressMCP.SESSION_KEY);
+        await this.ctx.storage.delete(AddressMCP.RUNTIME_KEY);
+
+        return AddressMCP.textResult({
+          detached: true,
+          sessionID,
+          warning: 'Only this local MCP binding was cleared; any active remote lease expires separately.',
+        });
+      },
+    );
+  }
+
   private registerDirectory(): void {
     this.server.registerTool(
       'agentAddressListAgents',
@@ -267,6 +297,7 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
     this.registerResume();
     this.registerHeartbeat();
     this.registerRelease();
+    this.registerForgetLocal();
     this.registerDirectory();
   }
 }
