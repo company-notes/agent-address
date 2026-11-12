@@ -63,6 +63,7 @@ jobs:
         run: node web/e2e/portal-browser.mjs
       - name: Verify isolated D1 schema cutover guard
         run: |
+          node --test scripts/check-d1-cutover.checks.mjs
           node scripts/check-d1-cutover.mjs --local
           npx wrangler d1 execute DB --local --config .wrangler.deploy.jsonc \
             --persist-to .wrangler-verify/legacy \
@@ -79,9 +80,7 @@ jobs:
 
   deploy:
     name: Deploy to Cloudflare
-    # Legacy main workflow keeps verifying code but must never redeploy V1 over live V2.
-    # Production releases come exclusively from production-v2.yml.
-    if: ${{ false }}
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -123,10 +122,27 @@ jobs:
               exit 1
             fi
           done
-      - name: Resolve Cloudflare resource names
+      - name: Resolve canonical Cloudflare resources via existing GitHub Secrets and Variables
         run: node scripts/resolve-cloudflare-ids.mjs
       - name: Generate deployment configuration
         run: node scripts/prepare-deploy.mjs
+      - name: Verify official Worker and original resource names before any remote change
+        run: |
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const config = JSON.parse(readFileSync(".wrangler.deploy.jsonc"));
+            if (process.env.CLOUDFLARE_ACCOUNT_ID !== "b471fa2c14470c664eec0a37616accd6" ||
+                config.name !== "agent-address" ||
+                config.d1_databases.find(x => x.binding === "DB")?.database_name !== "company-notes-agent-address" ||
+                config.kv_namespaces.find(x => x.binding === "OAUTH_KV")?.id !== process.env.CLOUDFLARE_OAUTH_KV_ID ||
+                config.d1_databases.find(x => x.binding === "DB")?.database_id !== process.env.CLOUDFLARE_D1_DATABASE_ID ||
+                config.routes?.[0]?.pattern !== "address.company-notes.com" ||
+                config.routes?.[0]?.custom_domain !== true) {
+              throw Error("Canonical Agent Address production configuration mismatch.");
+            }
+          '
+      - name: Validate Worker bundle without production mutation
+        run: npx wrangler deploy --dry-run --config .wrangler.deploy.jsonc --outdir .wrangler-production-check
       - name: Refuse incompatible D1 cutover before any remote migration
         run: node scripts/check-d1-cutover.mjs --remote
       - name: Apply D1 migrations
@@ -147,5 +163,5 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-      - name: Verify new deployment's live routes
-        run: node scripts/smoke-admin.mjs
+      - name: Verify official OAuth, MCP, Organization Portal and protected routes
+        run: node scripts/smoke-production.mjs
