@@ -44,8 +44,8 @@ export function AccountsPage() {
               dataIndex="organizationSlug"
               render={(value: string | null) => value ?? '—'}
             />
-            <Table.Column title="Hosts" dataIndex="hostCount" />
-            <Table.Column title="Works" dataIndex="workCount" />
+            <Table.Column title="Agents" dataIndex="agentCount" />
+            <Table.Column title="Sessions" dataIndex="sessionCount" />
           </Table>
         </Card>
       </Col>
