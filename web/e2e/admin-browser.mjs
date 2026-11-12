@@ -97,6 +97,8 @@ try {
 
   await page.goto(origin + '/admin/');
   await page.getByText('Agent Address · Administration').waitFor({ timeout: 15_000 });
+  assert.equal(await page.getByRole('link', { name: 'Organization Portal' })
+    .getAttribute('href'), '/portal/');
   await page.getByText(account.email).first().waitFor({ timeout: 15_000 });
   assert.equal(await page.getByText('Registered accounts').count(), 1);
 
