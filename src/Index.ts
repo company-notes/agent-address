@@ -25,19 +25,19 @@ class ApplicationRouter {
 
     try {
       if (path.startsWith('/admin/api/')) {
-        return new AdminController(env).handle(request);
+        return await new AdminController(env).handle(request);
       }
 
       if (AdminAssets.matches(path)) {
-        return AdminAssets.handle(request, env);
+        return await AdminAssets.handle(request, env);
       }
 
       if (path === AuthorizeController.PATH) {
-        return new AuthorizeController(env).handle(request);
+        return await new AuthorizeController(env).handle(request);
       }
 
       if (path.startsWith('/v2/account/')) {
-        return this.accountAPI(request, env);
+        return await this.accountAPI(request, env);
       }
 
       throw new APIError(404, 'not_found', 'Resource not found.');
