@@ -40,7 +40,7 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
     return new IdentityAPIClient(this.env, this.props!);
   }
 
-  private get lifecycle(): MCPIdentityLifecycle {
+  private get identityManager(): MCPIdentityLifecycle {
     return new MCPIdentityLifecycle(this.api, this.ctx.storage, this.props!.accountId);
   }
 
@@ -50,7 +50,7 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
 
   private async ensureIdentity(displayName?: string): Promise<IdentitySummary> {
     if (!this.pendingEnsure) {
-      this.pendingEnsure = this.lifecycle.ensure(displayName);
+      this.pendingEnsure = this.identityManager.ensure(displayName);
     }
 
     try {
@@ -82,7 +82,7 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
       { description: 'Read the signed-in Account, Organization and locally selected Session.' },
       async () => AddressMCP.textResult({
         ...await this.api.call<AccountStatus>('GET', '/v2/account/status'),
-        session: await this.lifecycle.current(),
+        session: await this.identityManager.current(),
       }),
     );
   }
@@ -118,7 +118,7 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
           runtimeLabel: z.string().optional(),
         },
       },
-      async (input) => AddressMCP.textResult(await this.lifecycle.claim(input)),
+      async (input) => AddressMCP.textResult(await this.identityManager.claim(input)),
     );
   }
 
@@ -136,7 +136,7 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
         },
       },
       async ({ agentID, ...input }) => AddressMCP.textResult(
-        await this.lifecycle.claimSession(agentID, input),
+        await this.identityManager.claimSession(agentID, input),
       ),
     );
   }
@@ -148,7 +148,7 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
         description: 'Restore only the Session privately saved in this MCP connection. ' +
           'Never request or return a Resume capability in model-visible text.',
       },
-      async () => AddressMCP.textResult(await this.lifecycle.resume()),
+      async () => AddressMCP.textResult(await this.identityManager.resume()),
     );
   }
 
@@ -156,7 +156,7 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
     this.server.registerTool(
       'agentAddressHeartbeatRuntime',
       { description: 'Renew the current Session\'s private active Runtime lease.' },
-      async () => AddressMCP.textResult(await this.lifecycle.heartbeat()),
+      async () => AddressMCP.textResult(await this.identityManager.heartbeat()),
     );
   }
 
@@ -167,7 +167,7 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
         description: 'Release Runtime ownership but retain private Session Resume information. ' +
           'Ensure can restore this Session afterward.',
       },
-      async () => AddressMCP.textResult(await this.lifecycle.release()),
+      async () => AddressMCP.textResult(await this.identityManager.release()),
     );
   }
 
@@ -178,7 +178,7 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
         description: 'Explicitly forget this MCP connection\'s saved identity after authorized ' +
           'release or external revocation. This does not revoke a live remote Runtime.',
       },
-      async () => AddressMCP.textResult(await this.lifecycle.forget()),
+      async () => AddressMCP.textResult(await this.identityManager.forget()),
     );
   }
 
