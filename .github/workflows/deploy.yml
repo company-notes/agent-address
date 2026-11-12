@@ -61,10 +61,21 @@ jobs:
         run: node web/e2e/admin-browser.mjs
       - name: Real browser Portal flow against local Worker, OAuth and D1
         run: node web/e2e/portal-browser.mjs
+      - name: Verify isolated D1 schema cutover guard
+        run: |
+          node scripts/check-d1-cutover.mjs --local
+          npx wrangler d1 execute DB --local --config .wrangler.deploy.jsonc \
+            --persist-to .wrangler-verify/legacy \
+            --command "CREATE TABLE addresses (id TEXT PRIMARY KEY)"
+          if node scripts/check-d1-cutover.mjs --local --persist-to=.wrangler-verify/legacy; then
+            echo "::error::D1 guard accepted a legacy Host/Work schema"
+            exit 1
+          fi
       - name: Validate deployment script syntax
         run: |
           node --check scripts/prepare-deploy.mjs
           node --check scripts/resolve-cloudflare-ids.mjs
+          node --check scripts/check-d1-cutover.mjs
 
   deploy:
     name: Deploy to Cloudflare
@@ -114,6 +125,8 @@ jobs:
         run: node scripts/resolve-cloudflare-ids.mjs
       - name: Generate deployment configuration
         run: node scripts/prepare-deploy.mjs
+      - name: Refuse incompatible D1 cutover before any remote migration
+        run: node scripts/check-d1-cutover.mjs --remote
       - name: Apply D1 migrations
         run: npx wrangler d1 migrations apply DB --remote --config .wrangler.deploy.jsonc
       - name: Deploy Cloudflare Worker
