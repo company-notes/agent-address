@@ -97,28 +97,27 @@ export function AgentRegistryCard({
         dataSource={agents}
         rowKey="id"
         renderItem={(agent) => (
-          <List.Item
-            actions={[
-              <Button key="sessions" onClick={() => onSelect(agent)}>
-                Sessions
-              </Button>,
-              <Button key="edit" onClick={() => onEdit(agent)}>Edit Agent</Button>,
-              <Popconfirm
-                key="archive"
-                title="Archive this Agent?"
-                description="All Sessions will be archived and their Runtime leases revoked."
-                okText="Archive Agent"
-                okButtonProps={{ danger: true }}
-                onConfirm={() => onArchive(agent.id)}
-              >
-                <Button danger disabled={loading}>Archive Agent</Button>
-              </Popconfirm>,
-            ]}
-          >
-            <List.Item.Meta
-              title={agent.displayName ?? agent.handle}
-              description={agent.handle}
-            />
+          <List.Item>
+            <div style={{ width: '100%', minWidth: 0 }}>
+              <List.Item.Meta
+                title={agent.displayName ?? agent.handle}
+                description={agent.handle}
+              />
+
+              <Space wrap size="small">
+                <Button onClick={() => onSelect(agent)}>Sessions</Button>
+                <Button onClick={() => onEdit(agent)}>Edit Agent</Button>
+                <Popconfirm
+                  title="Archive this Agent?"
+                  description="All Sessions will be archived and their Runtime leases revoked."
+                  okText="Archive Agent"
+                  okButtonProps={{ danger: true }}
+                  onConfirm={() => onArchive(agent.id)}
+                >
+                  <Button danger disabled={loading}>Archive Agent</Button>
+                </Popconfirm>
+              </Space>
+            </div>
           </List.Item>
         )}
       />
@@ -179,49 +178,48 @@ export function SessionRegistryCard({
             dataSource={sessions}
             rowKey="id"
             renderItem={(session) => (
-              <List.Item
-                actions={[
-                  <Button key="edit" onClick={() => onEdit(session)}>Edit Session</Button>,
-                  <Button
-                    key="default"
-                    disabled={loading || session.isDefault}
-                    onClick={() => onDefault(session.id)}
-                  >
-                    Make Default
-                  </Button>,
-                  <Popconfirm
-                    key="rotate"
-                    title="Replace this Session's resume token?"
-                    description="The previous resume token will stop working immediately."
-                    okText="Rotate Token"
-                    onConfirm={() => onRotate(session.id)}
-                  >
-                    <Button disabled={loading}>Rotate Resume Token</Button>
-                  </Popconfirm>,
-                  <Popconfirm
-                    key="archive"
-                    title="Archive this Session?"
-                    description="This permanently revokes its Runtime lease and resume capability."
-                    okText="Archive Session"
-                    okButtonProps={{ danger: true }}
-                    onConfirm={() => onArchive(session.id)}
-                  >
-                    <Button danger disabled={loading || session.isDefault}>Archive Session</Button>
-                  </Popconfirm>,
-                ]}
-              >
-                <List.Item.Meta
-                  title={session.canonical}
-                  description={
-                    <Space wrap>
-                      {session.displayName && <Typography.Text>{session.displayName}</Typography.Text>}
-                      {session.isDefault && <Tag color="blue">Default Session</Tag>}
-                      {session.runtime
-                        ? <Tag color="green">Active Runtime: {session.runtime.label ?? 'Unnamed'}</Tag>
-                        : <Tag>Available</Tag>}
-                    </Space>
-                  }
-                />
+              <List.Item>
+                <div style={{ width: '100%', minWidth: 0 }}>
+                  <List.Item.Meta
+                    title={session.canonical}
+                    description={
+                      <Space wrap>
+                        {session.displayName && <Typography.Text>{session.displayName}</Typography.Text>}
+                        {session.isDefault && <Tag color="blue">Default Session</Tag>}
+                        {session.runtime
+                          ? <Tag color="green">Active Runtime: {session.runtime.label ?? 'Unnamed'}</Tag>
+                          : <Tag>Available</Tag>}
+                      </Space>
+                    }
+                  />
+
+                  <Space wrap size="small">
+                    <Button onClick={() => onEdit(session)}>Edit Session</Button>
+                    <Button
+                      disabled={loading || session.isDefault}
+                      onClick={() => onDefault(session.id)}
+                    >
+                      Make Default
+                    </Button>
+                    <Popconfirm
+                      title="Replace this Session's resume token?"
+                      description="The previous resume token will stop working immediately."
+                      okText="Rotate Token"
+                      onConfirm={() => onRotate(session.id)}
+                    >
+                      <Button disabled={loading}>Rotate Resume Token</Button>
+                    </Popconfirm>
+                    <Popconfirm
+                      title="Archive this Session?"
+                      description="This permanently revokes its Runtime lease and resume capability."
+                      okText="Archive Session"
+                      okButtonProps={{ danger: true }}
+                      onConfirm={() => onArchive(session.id)}
+                    >
+                      <Button danger disabled={loading || session.isDefault}>Archive Session</Button>
+                    </Popconfirm>
+                  </Space>
+                </div>
               </List.Item>
             )}
           />
