@@ -250,8 +250,8 @@ export class AuthorizePage {
   }
 
   private signInForm(values: FormValues): string {
-    return `<form method="post" action="/authorize">
-      <h2>Sign in</h2>${this.hiddenFields('signin')}
+    return `<form method="post" action="/authorize" class="auth-card">
+      <h3>Sign in to your account</h3>${this.hiddenFields('signin')}
       <label for="si-email">Email</label>
       <input id="si-email" name="email" type="email" autocomplete="username" inputmode="email" placeholder="you@example.com" required value="${
         values.intent === 'signin' ? AuthorizePage.escape(values.email) : ''
@@ -268,8 +268,8 @@ export class AuthorizePage {
          <input id="su-key" name="registrationKey" type="password" autocomplete="off" required>`
       : '';
 
-    return `<form method="post" action="/authorize">
-      <h2>Create an account</h2>${this.hiddenFields('signup')}
+    return `<form method="post" action="/authorize" class="auth-card">
+      <h3>Create an account</h3>${this.hiddenFields('signup')}
       <label for="su-email">Email</label>
       <input id="su-email" name="email" type="email" autocomplete="username" inputmode="email" placeholder="you@example.com" required value="${
         values.intent === 'signup' ? AuthorizePage.escape(values.email) : ''
