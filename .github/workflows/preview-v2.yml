@@ -1,9 +1,6 @@
 name: Deploy isolated Agent Address V2 Preview
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
-    branches: [main]
   push:
     branches:
       - feat/agent-session-identity-v2-20261112
@@ -19,10 +16,6 @@ concurrency:
 jobs:
   preview:
     name: Verify, migrate and deploy isolated Preview
-    if: >-
-      github.event_name != 'pull_request' ||
-      (github.event.pull_request.head.repo.full_name == github.repository &&
-       github.event.pull_request.head.ref == 'feat/agent-session-identity-v2-20261112')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
@@ -87,6 +80,8 @@ jobs:
           '
       - name: Validate Worker bundle before live changes
         run: npx wrangler deploy --dry-run --config .wrangler.deploy.jsonc --outdir .wrangler-preview-check
+      - name: Verify D1 guard accepts only Cloudflare metadata and V2 schema
+        run: node --test scripts/check-d1-cutover.checks.mjs
       - name: Refuse old, mixed, or incompatible remote D1
         run: node scripts/check-d1-cutover.mjs --remote
       - name: Apply fresh V2 D1 migrations to Preview database only
