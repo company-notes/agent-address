@@ -16,6 +16,13 @@ export class IdentityController {
   async handle(request: Request): Promise<Response> {
     const identity = await AccountAuthenticator.authenticate(request, this.env);
 
+    if (new URL(request.url).pathname === '/v2/account/grant' &&
+        request.method === 'GET') {
+      await this.services.accounts.assertAuthVersion(identity.accountId, identity.authVersion ?? 0);
+
+      return ResponseData.ok({ grantFingerprint: identity.grantFingerprint });
+    }
+
     return this.handleAuthenticated(identity.accountId, request, identity.authVersion);
   }
 
