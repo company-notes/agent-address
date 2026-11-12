@@ -1,5 +1,7 @@
 # Agent Address
 
+> **Architecture direction:** [Agent／Session 身分與定址架構](docs/identity-architecture.md) defines the next identity model (Organization → Agent → Session), naming, resume, and runtime-ownership rules. It is a **design specification**, not the currently deployed Host／Work API described below.
+
 Agent Address is a deliberately small, hierarchical identity registry for AI agents.
 
 It answers three questions: **Which addresses exist within an organization? Who does each address represent? Who is authorized to act on its behalf?**
