@@ -38,7 +38,7 @@ paths:
       responses:
         '200': { description: Agent directory }
     post:
-      summary: Create a new Agent and its initial default Session
+      summary: Register a new Agent and its initial default Session without occupying a Runtime
       requestBody:
         required: true
         content:
@@ -46,7 +46,19 @@ paths:
             schema:
               $ref: '#/components/schemas/NewAgent'
       responses:
-        '201': { description: Agent/Session identity and one-time resume/runtime capabilities }
+        '201': { description: Agent/Session identity and one-time resume capability }
+        '409': { description: Name conflict or no Organization }
+  /v2/account/agents/claim:
+    post:
+      summary: Create a new Agent and Default Session with an exclusive Runtime lease
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewAgent'
+      responses:
+        '201': { description: Agent/Session identity and resume/runtime capabilities }
         '409': { description: Name conflict or no Organization }
   /v2/account/agents/{agentID}/sessions:
     parameters:
@@ -57,7 +69,7 @@ paths:
         '200': { description: Sessions }
         '404': { description: Agent not found in this Organization }
     post:
-      summary: Create an additional non-default Session
+      summary: Register an additional non-default Session without occupying a Runtime
       requestBody:
         required: true
         content:
@@ -66,6 +78,19 @@ paths:
               $ref: '#/components/schemas/NewSession'
       responses:
         '201': { description: New Session and one-time capabilities }
+  /v2/account/agents/{agentID}/sessions/claim:
+    parameters:
+      - $ref: '#/components/parameters/agentID'
+    post:
+      summary: Create a new non-default Session and acquire an exclusive Runtime lease
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewSession'
+      responses:
+        '201': { description: Session identity and resume/runtime capabilities }
   /v2/account/sessions/{sessionID}:
     parameters:
       - $ref: '#/components/parameters/sessionID'

@@ -34,6 +34,7 @@ OAuth login ────►│ /authorize          │
 MCP tools ──────►│ /mcp                │
 HTTP clients ───►│ /v2/account/*       │
 Admin browser ──►│ /admin/ + /admin/api│
+Portal browser ─►│ /portal/            │
                 ├─────────────────────┤
                 │ IdentityController  │
                 │ Domain services     │
@@ -55,16 +56,18 @@ All Account API routes require an OAuth access token: `Authorization: Bearer <to
 | GET | `/v2/account/status` | Signed-in account and Organization |
 | POST | `/v2/account/organization` | Register the account's Organization (`slug`, `displayName`) |
 | GET | `/v2/account/agents` | List Organization Agents |
-| POST | `/v2/account/agents` | Create Agent and Default Session |
+| POST | `/v2/account/agents` | Register Agent and Default Session without occupying a Runtime |
+| POST | `/v2/account/agents/claim` | Create Agent and Default Session with an active Runtime lease |
 | GET | `/v2/account/agents/{agentID}/sessions` | List Agent Sessions |
-| POST | `/v2/account/agents/{agentID}/sessions` | Create another Session |
+| POST | `/v2/account/agents/{agentID}/sessions` | Register another Session without occupying a Runtime |
+| POST | `/v2/account/agents/{agentID}/sessions/claim` | Create another Session and acquire a Runtime lease |
 | GET | `/v2/account/sessions/{sessionID}` | Read Session identity |
 | POST | `/v2/account/sessions/{sessionID}/resume` | Resume with `resumeToken`, when unoccupied |
 | POST | `/v2/account/sessions/{sessionID}/heartbeat` | Renew active Runtime with `runtimeToken` |
 | POST | `/v2/account/sessions/{sessionID}/release` | Release a Runtime's ownership |
 | GET | `/v2/account/resolve?address=...` | Resolve Agent shorthand or full canonical address |
 
-A new Agent request can specify `agentName`, `sessionName`, `agentDisplayName`, `sessionDisplayName`, and optional `runtimeLabel`. Omitted handles are generated. `resumeToken` and `runtimeToken` are returned **only when first issued**; store them privately. They are capabilities, not human-readable addresses.
+A new Agent request can specify `agentName`, `sessionName`, `agentDisplayName`, `sessionDisplayName`, and optional `runtimeLabel`. Omitted handles are generated. Registration returns a private `resumeToken` without claiming a Runtime. Claiming also returns a `runtimeToken` and lease expiration. These capabilities are issued once; store them privately. They are capabilities, not human-readable addresses.
 
 For a new Codex doing FFL development, only `sessionName: "ffl-dev"` is necessary. For a multi-Agent bot, only `agentName: "xiaoming"` is necessary. Both return a full `organization/agent/session` address.
 
@@ -85,11 +88,11 @@ MCP uses exactly the same HTTP controller and domain rules as other Account API 
 
 Administrators can inspect Account/Organization/Agent/Session metadata and reset account passwords. Resetting an account password invalidates previous OAuth grants. The internal Admin UI does not expose resume or runtime tokens.
 
-The Organization self-service UI will use Account-level authorization; it must never inherit administrator access.
+The Organization self-service UI is available at `/portal/`. It signs in through the same OAuth flow as MCP and calls the same `/v2/account/*` API. It can register and list Agents and Sessions without pretending a browser is an active Runtime. The administrator console remains a separate Cloudflare Access-protected surface.
 
 ## Testing and deployment
 
-Use the project Testing Guide and [CODE_PRINCIPLES.md](CODE_PRINCIPLES.md). Exercise real Worker routing, OAuth and D1 through scenario-based tests; do not mock internal business behavior. The admin UI also has a real-Chrome browser test.
+Use the project Testing Guide and [CODE_PRINCIPLES.md](CODE_PRINCIPLES.md). Exercise real Worker routing, OAuth and D1 through scenario-based tests; do not mock internal business behavior. The admin UI has a browser test, and the Organization Portal has a real-Chromium test that drives a local Worker, OAuth, and D1 without internal API mocks.
 
 ```bash
 npm ci
