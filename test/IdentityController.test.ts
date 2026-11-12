@@ -70,6 +70,21 @@ describe('identity account API boundaries', () => {
     expect(new Set(agents.body.data.map((agent: { id: string }) => agent.id)).size).toBe(10);
   });
 
+  it('rejects old @Host address syntax instead of silently treating it as an Agent', async () => {
+    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
+    const slug = TestClient.uniqueName('nolegacy');
+    await client.registerOrganization(accessToken, slug);
+    await client.createAgent(accessToken, 'robot', 'main');
+
+    const legacy = await client.call(
+      'GET',
+      '/v2/account/resolve?address=' + encodeURIComponent(`${slug}/@robot/main`),
+      { token: accessToken },
+    );
+    expect(legacy.status).toBe(400);
+    expect(legacy.body.error.code).toBe('invalid_handle');
+  });
+
   it('registers an Agent from Portal without occupying its Session, then allows only one Runtime', async () => {
     const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
     const slug = TestClient.uniqueName('portal');
