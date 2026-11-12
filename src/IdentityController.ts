@@ -51,6 +51,13 @@ export class IdentityController {
       return ResponseData.ok(await this.services.organizations.register(accountID, slug, displayName), 201);
     }
 
+    if (method === 'PATCH' && resource === 'organization' && segments.length === 3) {
+      const data = await RequestData.readJSON(request);
+      const displayName = RequestData.requiredString(data, 'displayName', 120);
+
+      return ResponseData.ok(await this.services.organizations.updateDisplayName(accountID, displayName));
+    }
+
     if (method === 'POST' && resource === 'agents' && identifier === 'claim' &&
         segments.length === 4) {
       const data = await RequestData.readJSON(request);
@@ -88,6 +95,19 @@ export class IdentityController {
       }
     }
 
+    if (resource === 'agents' && identifier && segments.length === 4) {
+      if (method === 'PATCH') {
+        const data = await RequestData.readJSON(request);
+        const changes = IdentityController.agentChanges(data);
+
+        return ResponseData.ok(await this.services.identities.updateAgent(accountID, identifier, changes));
+      }
+
+      if (method === 'DELETE') {
+        return ResponseData.ok(await this.services.identities.archiveAgent(accountID, identifier));
+      }
+    }
+
     if (resource === 'agents' && identifier && action === 'sessions' && segments.length === 5) {
       if (method === 'GET') {
         return ResponseData.ok(await this.services.identities.listSessions(accountID, identifier));
@@ -101,8 +121,31 @@ export class IdentityController {
       }
     }
 
-    if (method === 'GET' && resource === 'sessions' && identifier && segments.length === 4) {
-      return ResponseData.ok(await this.services.identities.getSession(accountID, identifier));
+    if (resource === 'sessions' && identifier && segments.length === 4) {
+      if (method === 'GET') {
+        return ResponseData.ok(await this.services.identities.getSession(accountID, identifier));
+      }
+
+      if (method === 'PATCH') {
+        const data = await RequestData.readJSON(request);
+        const changes = IdentityController.sessionChanges(data);
+
+        return ResponseData.ok(await this.services.identities.updateSession(accountID, identifier, changes));
+      }
+
+      if (method === 'DELETE') {
+        return ResponseData.ok(await this.services.identities.archiveSession(accountID, identifier));
+      }
+    }
+
+    if (resource === 'sessions' && identifier && segments.length === 5 &&
+        method === 'PUT' && action === 'default') {
+      return ResponseData.ok(await this.services.identities.setDefaultSession(accountID, identifier));
+    }
+
+    if (resource === 'sessions' && identifier && segments.length === 5 &&
+        method === 'POST' && action === 'rotate-resume') {
+      return ResponseData.ok(await this.services.identities.rotateResumeToken(accountID, identifier));
     }
 
     if (method === 'POST' && resource === 'sessions' && identifier && action && segments.length === 5) {
@@ -149,6 +192,32 @@ export class IdentityController {
     }
 
     throw new ApplicationError(404, 'not_found', 'Identity API endpoint not found.');
+  }
+
+  private static agentChanges(data: JSONRecord) {
+    if (!('agentName' in data) && !('agentDisplayName' in data)) {
+      throw new ApplicationError(400, 'invalid_request', 'Provide an Agent name or display name.');
+    }
+
+    return {
+      agentName: 'agentName' in data ? RequestData.requiredString(data, 'agentName', 64) : undefined,
+      agentDisplayName: 'agentDisplayName' in data
+        ? RequestData.optionalString(data, 'agentDisplayName', 120)
+        : undefined,
+    };
+  }
+
+  private static sessionChanges(data: JSONRecord) {
+    if (!('sessionName' in data) && !('sessionDisplayName' in data)) {
+      throw new ApplicationError(400, 'invalid_request', 'Provide a Session name or display name.');
+    }
+
+    return {
+      sessionName: 'sessionName' in data ? RequestData.requiredString(data, 'sessionName', 64) : undefined,
+      sessionDisplayName: 'sessionDisplayName' in data
+        ? RequestData.optionalString(data, 'sessionDisplayName', 120)
+        : undefined,
+    };
   }
 
   private static newSessionInput(data: JSONRecord): NewSessionInput {

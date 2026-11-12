@@ -81,4 +81,14 @@ export class OrganizationService {
 
     return { id, slug, displayName, createdAt };
   }
+  async updateDisplayName(accountID: string, displayName: string): Promise<OrganizationRow> {
+    const current = await this.getForAccount(accountID);
+
+    await this.db.prepare(
+      'UPDATE organizations SET display_name = ? WHERE id = ?',
+    ).bind(displayName, current.id).run();
+
+    return this.getByID(current.id);
+  }
+
 }
