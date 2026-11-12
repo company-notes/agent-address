@@ -5,32 +5,34 @@ import { z } from 'zod';
 import { AccountProps } from './Authorize';
 import { Env } from './Env';
 import { IdentityAPIClient } from './IdentityAPIClient';
-import { AgentRow, ClaimedIdentity, PublicSession, ResumedIdentity } from './IdentityService';
+import { AgentRow, PublicSession } from './IdentityService';
+import { IdentitySummary, MCPIdentityLifecycle } from './MCPIdentityLifecycle';
 
 type AccountStatus = {
   account: { email: string };
   organization: { id: string; slug: string; displayName: string } | null;
 };
 
-// MCP handles tool descriptions and the current client's saved identity only.
-// All business behavior is delegated to the shared HTTP API.
+// MCP is a thin adapter. Identity, authorization and Runtime ownership remain
+// inside the shared HTTP domain services, with private connection-scoped state.
 export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
-  private static readonly SESSION_KEY = 'sessionID';
-  private static readonly RUNTIME_KEY = 'runtimeToken';
-
   private static readonly INSTRUCTIONS =
-    'Agent Address identifies your Organization, Agent, and Session using an ' +
-    'organization/agent/session address. One application may host many Agents, and one Agent ' +
-    'may host many Sessions. If you have no Organization, ask the user for its name. ' +
-    'Create a new Agent for a new instance; resume an existing Session only with an authorized ' +
-    'resume token. The user may name the Agent, Session, both, or neither. ' +
-    'Always give the user the complete canonical address after registration. ' +
-    'Never reclaim a Session already held by another Runtime; choose a new address. ' +
-    'If you are using a Session for more than 15 minutes, call agentAddressHeartbeatRuntime ' +
-    'regularly to keep its exclusive Runtime lease active.';
+    'After successful OAuth sign-in, immediately call agentAddressEnsureIdentity. ' +
+    'This action creates a personal Organization if needed, claims an Agent and Default Session ' +
+    'on first use, or safely resumes the same Session when its previous lease has expired. ' +
+    'Do not ask the user to choose an address or manage Runtime/Resume credentials. ' +
+    'If the Agent persona already has a display name, pass it as agentDisplayName; otherwise ' +
+    'let the service choose an address. Do not infer ownership from a persona name, account ' +
+    'membership or someone else\'s address. Only change or forget the existing identity on an ' +
+    'explicit user request. Show the resulting canonical organization/agent/session address. ' +
+    'A second active Runtime cannot be taken over. Runtime and Resume credentials are never ' +
+    'model-visible tool arguments or results. A fresh independent MCP connection gets its own ' +
+    'Agent unless an authorized persisted connection can securely resume its previous one.';
+
+  private pendingEnsure: Promise<IdentitySummary> | null = null;
 
   server = new McpServer(
-    { name: 'Agent Address', version: '1.0.0' },
+    { name: 'Agent Address', version: '2.0.0' },
     { instructions: AddressMCP.INSTRUCTIONS },
   );
 
@@ -38,44 +40,50 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
     return new IdentityAPIClient(this.env, this.props!);
   }
 
+  private get lifecycle(): MCPIdentityLifecycle {
+    return new MCPIdentityLifecycle(this.api, this.ctx.storage, this.props!.accountId);
+  }
+
   private static textResult(data: unknown) {
     return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
   }
 
-  private async requireSessionID(): Promise<string> {
-    const sessionID = await this.ctx.storage.get<string>(AddressMCP.SESSION_KEY);
-
-    if (!sessionID) {
-      throw new Error('No active Session. Claim a new Agent or resume an existing Session first.');
+  private async ensureIdentity(displayName?: string): Promise<IdentitySummary> {
+    if (!this.pendingEnsure) {
+      this.pendingEnsure = this.lifecycle.ensure(displayName);
     }
 
-    return sessionID;
-  }
-
-  private async rememberIdentity(sessionID: string, runtimeToken: string): Promise<void> {
-    await this.ctx.storage.put(AddressMCP.SESSION_KEY, sessionID);
-    await this.ctx.storage.put(AddressMCP.RUNTIME_KEY, runtimeToken);
-  }
-
-  private async assertUnclaimed(): Promise<void> {
-    if (await this.ctx.storage.get<string>(AddressMCP.SESSION_KEY)) {
-      throw new Error('This MCP connection already has an active Session. Release it before switching.');
+    try {
+      return await this.pendingEnsure;
+    } finally {
+      this.pendingEnsure = null;
     }
+  }
+
+  private registerEnsure(): void {
+    this.server.registerTool(
+      'agentAddressEnsureIdentity',
+      {
+        description: 'Use immediately after OAuth login. Automatically create or restore this ' +
+          'Agent\'s private Session without user-managed credentials or naming questions.',
+        inputSchema: {
+          agentDisplayName: z.string().trim().min(1).max(120).optional(),
+        },
+      },
+      async ({ agentDisplayName }) => AddressMCP.textResult(
+        await this.ensureIdentity(agentDisplayName),
+      ),
+    );
   }
 
   private registerStatus(): void {
     this.server.registerTool(
       'agentAddressGetStatus',
-      { description: 'Show the signed-in Organization and current Agent/Session canonical address.' },
-      async () => {
-        const status = await this.api.call<AccountStatus>('GET', '/v2/account/status');
-        const sessionID = await this.ctx.storage.get<string>(AddressMCP.SESSION_KEY);
-        const session = sessionID
-          ? await this.api.call<PublicSession>('GET', `/v2/account/sessions/${encodeURIComponent(sessionID)}`)
-          : null;
-
-        return AddressMCP.textResult({ ...status, session });
-      },
+      { description: 'Read the signed-in Account, Organization and locally selected Session.' },
+      async () => AddressMCP.textResult({
+        ...await this.api.call<AccountStatus>('GET', '/v2/account/status'),
+        session: await this.lifecycle.current(),
+      }),
     );
   }
 
@@ -83,7 +91,8 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
     this.server.registerTool(
       'agentAddressRegisterOrganization',
       {
-        description: 'Register an Organization for your signed-in account, if it does not already have one.',
+        description: 'Explicitly register a named Organization if the user requests one. ' +
+          'Normal onboarding creates a private personal Organization automatically.',
         inputSchema: {
           slug: z.string(),
           displayName: z.string(),
@@ -99,7 +108,8 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
     this.server.registerTool(
       'agentAddressClaimAgent',
       {
-        description: 'Register one new Agent with its initial default Session. All names are optional.',
+        description: 'Explicitly create a new Agent and initial Default Session; no private ' +
+          'Runtime or Resume credentials are returned. Use Ensure for normal onboarding.',
         inputSchema: {
           agentName: z.string().optional(),
           sessionName: z.string().optional(),
@@ -108,14 +118,7 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
           runtimeLabel: z.string().optional(),
         },
       },
-      async (input) => {
-        await this.assertUnclaimed();
-
-        const result = await this.api.call<ClaimedIdentity>('POST', '/v2/account/agents/claim', input);
-        await this.rememberIdentity(result.session.id, result.runtimeToken);
-
-        return AddressMCP.textResult(result);
-      },
+      async (input) => AddressMCP.textResult(await this.lifecycle.claim(input)),
     );
   }
 
@@ -123,7 +126,8 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
     this.server.registerTool(
       'agentAddressCreateSession',
       {
-        description: 'Create another Session under a registered Agent; first release your current Session.',
+        description: 'Explicitly create another Session under an authorized Agent after ' +
+          'releasing the current Session.',
         inputSchema: {
           agentID: z.string(),
           sessionName: z.string().optional(),
@@ -131,18 +135,9 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
           runtimeLabel: z.string().optional(),
         },
       },
-      async ({ agentID, ...input }) => {
-        await this.assertUnclaimed();
-
-        const created = await this.api.call<ClaimedIdentity>(
-          'POST',
-          `/v2/account/agents/${encodeURIComponent(agentID)}/sessions/claim`,
-          input,
-        );
-        await this.rememberIdentity(created.session.id, created.runtimeToken);
-
-        return AddressMCP.textResult(created);
-      },
+      async ({ agentID, ...input }) => AddressMCP.textResult(
+        await this.lifecycle.claimSession(agentID, input),
+      ),
     );
   }
 
@@ -150,83 +145,29 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
     this.server.registerTool(
       'agentAddressResumeSession',
       {
-        description: 'Resume by Session ID or canonical address with its private resume token; refuses active Runtime conflicts.',
-        inputSchema: {
-          sessionID: z.string().optional(),
-          address: z.string().optional(),
-          resumeToken: z.string(),
-          runtimeLabel: z.string().optional(),
-        },
+        description: 'Restore only the Session privately saved in this MCP connection. ' +
+          'Never request or return a Resume capability in model-visible text.',
       },
-      async ({ sessionID, address, resumeToken, runtimeLabel }) => {
-        await this.assertUnclaimed();
-
-        if (Boolean(sessionID) === Boolean(address)) {
-          throw new Error('Provide either a Session ID or an Agent/Session address, not both.');
-        }
-
-        const targetID = sessionID ?? (await this.api.call<PublicSession>(
-          'GET',
-          `/v2/account/resolve?address=${encodeURIComponent(address!)}`,
-        )).id;
-        const resumed = await this.api.call<ResumedIdentity>(
-          'POST',
-          `/v2/account/sessions/${encodeURIComponent(targetID)}/resume`,
-          { resumeToken, runtimeLabel },
-        );
-        await this.rememberIdentity(targetID, resumed.runtimeToken);
-
-        return AddressMCP.textResult(resumed);
-      },
+      async () => AddressMCP.textResult(await this.lifecycle.resume()),
     );
   }
 
   private registerHeartbeat(): void {
     this.server.registerTool(
       'agentAddressHeartbeatRuntime',
-      { description: 'Renew this active Session Runtime lease before it expires.' },
-      async () => {
-        const sessionID = await this.requireSessionID();
-        const runtimeToken = await this.ctx.storage.get<string>(AddressMCP.RUNTIME_KEY);
-
-        if (!runtimeToken) {
-          throw new Error('This Runtime does not have an ownership token.');
-        }
-
-        const result = await this.api.call<{ expiresAt: string }>(
-          'POST',
-          `/v2/account/sessions/${encodeURIComponent(sessionID)}/heartbeat`,
-          { runtimeToken },
-        );
-
-        return AddressMCP.textResult(result);
-      },
+      { description: 'Renew the current Session\'s private active Runtime lease.' },
+      async () => AddressMCP.textResult(await this.lifecycle.heartbeat()),
     );
   }
 
   private registerRelease(): void {
     this.server.registerTool(
       'agentAddressReleaseRuntime',
-      { description: 'Release this Runtime ownership without deleting the Agent or Session.' },
-      async () => {
-        const sessionID = await this.requireSessionID();
-        const runtimeToken = await this.ctx.storage.get<string>(AddressMCP.RUNTIME_KEY);
-
-        if (!runtimeToken) {
-          throw new Error('This Runtime does not have an ownership token.');
-        }
-
-        const result = await this.api.call<PublicSession>(
-          'POST',
-          `/v2/account/sessions/${encodeURIComponent(sessionID)}/release`,
-          { runtimeToken },
-        );
-
-        await this.ctx.storage.delete(AddressMCP.SESSION_KEY);
-        await this.ctx.storage.delete(AddressMCP.RUNTIME_KEY);
-
-        return AddressMCP.textResult({ released: true, canonical: result.canonical });
+      {
+        description: 'Release Runtime ownership but retain private Session Resume information. ' +
+          'Ensure can restore this Session afterward.',
       },
+      async () => AddressMCP.textResult(await this.lifecycle.release()),
     );
   }
 
@@ -234,27 +175,17 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
     this.server.registerTool(
       'agentAddressForgetLocalSession',
       {
-        description: 'Clear this MCP connection\'s saved Session identity after it was revoked externally. ' +
-          'Does not release an active remote Runtime lease; call agentAddressReleaseRuntime first if possible.',
+        description: 'Explicitly forget this MCP connection\'s saved identity after authorized ' +
+          'release or external revocation. This does not revoke a live remote Runtime.',
       },
-      async () => {
-        const sessionID = await this.requireSessionID();
-        await this.ctx.storage.delete(AddressMCP.SESSION_KEY);
-        await this.ctx.storage.delete(AddressMCP.RUNTIME_KEY);
-
-        return AddressMCP.textResult({
-          detached: true,
-          sessionID,
-          warning: 'Only this local MCP binding was cleared; any active remote lease expires separately.',
-        });
-      },
+      async () => AddressMCP.textResult(await this.lifecycle.forget()),
     );
   }
 
   private registerDirectory(): void {
     this.server.registerTool(
       'agentAddressListAgents',
-      { description: 'List all registered Agent identities and their default Sessions in your Organization.' },
+      { description: 'List authorized Agents and their Default Sessions in your Organization.' },
       async () => AddressMCP.textResult(
         await this.api.call<AgentRow[]>('GET', '/v2/account/agents'),
       ),
@@ -263,13 +194,12 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
     this.server.registerTool(
       'agentAddressListSessions',
       {
-        description: 'List the Sessions belonging to an Agent in your Organization.',
+        description: 'List Sessions belonging to an authorized Agent.',
         inputSchema: { agentID: z.string() },
       },
       async ({ agentID }) => AddressMCP.textResult(
         await this.api.call<PublicSession[]>(
-          'GET',
-          `/v2/account/agents/${encodeURIComponent(agentID)}/sessions`,
+          'GET', `/v2/account/agents/${encodeURIComponent(agentID)}/sessions`,
         ),
       ),
     );
@@ -277,19 +207,19 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
     this.server.registerTool(
       'agentAddressResolve',
       {
-        description: 'Resolve an Organization/Agent[/Session] address to the canonical three-level Session address.',
+        description: 'Resolve an Agent shorthand or full canonical address to a real Session.',
         inputSchema: { address: z.string() },
       },
       async ({ address }) => AddressMCP.textResult(
         await this.api.call<PublicSession>(
-          'GET',
-          `/v2/account/resolve?address=${encodeURIComponent(address)}`,
+          'GET', `/v2/account/resolve?address=${encodeURIComponent(address)}`,
         ),
       ),
     );
   }
 
   async init(): Promise<void> {
+    this.registerEnsure();
     this.registerStatus();
     this.registerOrganization();
     this.registerClaim();
