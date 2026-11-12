@@ -20,7 +20,7 @@ export class IdentityNames {
   }
 
   static handle(value: string): string {
-    const handle = value.trim().toLowerCase().replace(/^@/, '');
+    const handle = value.trim().toLowerCase();
 
     if (!this.HANDLE_RE.test(handle)) {
       throw new ApplicationError(
@@ -34,7 +34,7 @@ export class IdentityNames {
   }
 
   static path(value: string): string {
-    const raw = value.trim().replace(/^@/, '').replace(/^\/+|\/+$/g, '');
+    const raw = value.trim().replace(/^\/+|\/+$/g, '');
 
     if (!raw) {
       throw new ApplicationError(400, 'invalid_path', 'Address path is required.');
