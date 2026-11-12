@@ -1,79 +1,84 @@
 import { env, exports } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 
-import { AccountController } from '../src/AccountAPI';
 import { AdminAuthenticator } from '../src/AdminAuth';
 import { AdminService } from '../src/AdminService';
+import { IdentityController } from '../src/IdentityController';
 import { Services } from '../src/Services';
+
 import { TestClient } from './Helpers';
 
-describe('admin accounts (real D1)', () => {
+describe('Admin accounts, Agents and Sessions (real D1)', () => {
   const services = new Services(env);
-  const admin = new AdminService(env.DB, services.accounts, services.registry);
+  const admin = new AdminService(env.DB, services.accounts, services.organizations);
 
-  it('lists registered accounts and their actual Host/Work relationships without exposing secrets', async () => {
-    const email = `${TestClient.uniqueName('admin-list')}@example.com`;
-    const account = await services.accounts.signUp(email, 'password-initial-123', TestClient.REGISTRATION_KEY);
+  it('shows actual Organization, Agent, Session relationships but never credentials', async () => {
+    const email = `${TestClient.uniqueName('admin')}@example.com`;
+    const account = await services.accounts.signUp(email, 'long-password-123', TestClient.REGISTRATION_KEY);
     const slug = TestClient.uniqueName('company');
-    const organization = (await services.registry.createOrganization(slug, 'Team')).organization;
-    const host = (await services.registry.createAddress(organization, 'mac', null, null)).address;
-    await services.registry.createAddress(organization, 'current-work', null, host);
-    const orgToken = await services.registry.rotateOrganizationToken(organization);
-    await services.accounts.linkOrganization(account, slug, orgToken);
+    await services.organizations.register(account.id, slug, 'Team');
+    const claimed = await services.identities.createAgent(account.id, {
+      agentName: 'releasebot',
+      sessionName: 'main',
+    });
 
     const page = await admin.listAccounts(email, 0, 10);
     expect(page.total).toBe(1);
-    expect(page.items[0].hostCount).toBe(1);
-    expect(page.items[0].workCount).toBe(1);
+    expect(page.items[0]).toMatchObject({ agentCount: 1, sessionCount: 1 });
 
     const detail = await admin.getAccount(account.id);
-    expect((detail.addresses as unknown[]).length).toBe(2);
+    expect(detail.agents).toHaveLength(1);
+    expect(detail.sessions[0].canonical).toBe(`${slug}/releasebot/main`);
+    expect(JSON.stringify(detail)).not.toContain(claimed.resumeToken);
+    expect(JSON.stringify(detail)).not.toContain(claimed.runtimeToken);
     expect(JSON.stringify(detail)).not.toMatch(/passwordHash|passwordSalt|tokenHash/i);
   });
 
-  it('reports an unlinked account without inventing organization metadata', async () => {
-    const email = `${TestClient.uniqueName('admin-unlinked')}@example.com`;
-    const account = await services.accounts.signUp(email, 'password-initial-123', TestClient.REGISTRATION_KEY);
+  it('handles a new account with no Organization', async () => {
+    const email = `${TestClient.uniqueName('unlinked')}@example.com`;
+    const account = await services.accounts.signUp(email, 'long-password-123', TestClient.REGISTRATION_KEY);
 
     const detail = await admin.getAccount(account.id);
-
     expect(detail.organization).toBeNull();
-    expect(detail.addresses).toEqual([]);
-    expect(detail.credentials).toEqual([]);
-    expect(detail.enrollments).toEqual([]);
-    expect(detail.auditEvents).toEqual([]);
+    expect(detail.agents).toEqual([]);
+    expect(detail.sessions).toEqual([]);
   });
 
-  it('atomically resets a password, audits the actor, and invalidates old account grants', async () => {
-    const email = `${TestClient.uniqueName('admin-reset')}@example.com`;
-    const oldPassword = 'old-password-123';
-    const newPassword = 'new-password-321';
-    const account = await services.accounts.signUp(email, oldPassword, TestClient.REGISTRATION_KEY);
-    const accountRequest = new Request(`${TestClient.ORIGIN}/v1/account/status`);
-    const before = await new AccountController(env).handleAuthenticated(account.id, accountRequest, 0);
+  it('atomically changes a password, audits it, and revokes older OAuth grants', async () => {
+    const email = `${TestClient.uniqueName('reset')}@example.com`;
+    const account = await services.accounts.signUp(email, 'old-password-123', TestClient.REGISTRATION_KEY);
+    const request = new Request(`${TestClient.ORIGIN}/v2/account/status`);
+    const controller = new IdentityController(env);
+    const before = await controller.handleAuthenticated(account.id, request, 0);
     expect(before.status).toBe(200);
 
-    expect((await admin.resetPassword(account.id, newPassword, 'admin@example.com')).passwordChanged).toBe(true);
-    await expect(services.accounts.logIn(email, oldPassword)).rejects.toMatchObject({ code: 'invalid_credentials' });
-    await expect(services.accounts.logIn(email, newPassword)).resolves.toMatchObject({ id: account.id });
-    await expect(new AccountController(env).handleAuthenticated(account.id, accountRequest, 0))
+    await admin.resetPassword(account.id, 'new-password-321', 'operator@example.com');
+
+    await expect(services.accounts.logIn(email, 'old-password-123'))
+      .rejects.toMatchObject({ code: 'invalid_credentials' });
+    await expect(services.accounts.logIn(email, 'new-password-321'))
+      .resolves.toMatchObject({ id: account.id });
+    await expect(controller.handleAuthenticated(account.id, request, 0))
       .rejects.toMatchObject({ code: 'authorization_revoked' });
 
-    const audit = await env.DB.prepare('SELECT actor_email AS actorEmail FROM admin_audit WHERE target_account_id = ?')
-      .bind(account.id).first<{ actorEmail: string }>();
-    expect(audit?.actorEmail).toBe('admin@example.com');
+    const audit = await env.DB.prepare(
+      'SELECT actor_email AS actorEmail FROM admin_audit WHERE target_account_id = ?',
+    ).bind(account.id).first<{ actorEmail: string }>();
+
+    expect(audit?.actorEmail).toBe('operator@example.com');
   });
 
-  it('keeps the public Admin API closed until Access is configured', async () => {
-    const response = await exports.default.fetch(new Request(`${TestClient.ORIGIN}/v1/admin/accounts`));
+  it('requires Cloudflare Access and rejects foreign-origin mutations', async () => {
+    const response = await exports.default.fetch(
+      new Request(`${TestClient.ORIGIN}/admin/api/accounts`),
+    );
     expect(response.status).toBe(503);
-    expect(response.headers.get('access-control-allow-origin')).toBeNull();
-  });
 
-  it('rejects cross-origin browser mutations', () => {
-    expect(() => AdminAuthenticator.assertSafeMutation(new Request(`${TestClient.ORIGIN}/v1/admin/accounts/x/password`, {
-      method: 'PUT',
-      headers: { origin: 'https://other.example', 'sec-fetch-site': 'cross-site' },
-    }))).toThrowError('same-origin');
+    expect(() => AdminAuthenticator.assertSafeMutation(
+      new Request(`${TestClient.ORIGIN}/admin/api/accounts/x/password`, {
+        method: 'PUT',
+        headers: { origin: 'https://attacker.example', 'sec-fetch-site': 'cross-site' },
+      }),
+    )).toThrowError('same-origin');
   });
 });

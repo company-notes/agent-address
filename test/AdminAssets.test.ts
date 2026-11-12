@@ -24,7 +24,7 @@ describe('admin static assets binding', () => {
     expect(AdminAssets.matches('/authorize')).toBe(false);
     expect(AdminAssets.matches('/mcp')).toBe(false);
     expect(AdminAssets.matches('/token')).toBe(false);
-    expect(AdminAssets.matches('/v1/admin/accounts')).toBe(false);
+    expect(AdminAssets.matches('/v2/account/agents')).toBe(false);
   });
 
   it('serves the SPA shell and Vite bundle files at their root binding locations', async () => {
