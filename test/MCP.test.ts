@@ -59,6 +59,7 @@ describe('real MCP client authenticates through OAuth and uses the shared API', 
       'agentAddressClaimAgent',
       'agentAddressCreateSession',
       'agentAddressResumeSession',
+      'agentAddressHeartbeatRuntime',
       'agentAddressReleaseRuntime',
       'agentAddressResolve',
       'agentAddressListAgents',
@@ -83,6 +84,10 @@ describe('real MCP client authenticates through OAuth and uses the shared API', 
 
     const resolved = await session.call('agentAddressResolve', { address: `${slug}/xiaoming` });
     expect(resolved.data.id).toBe(claimed.data.session.id);
+
+    const renewed = await session.call('agentAddressHeartbeatRuntime');
+    expect(renewed.isError).toBe(false);
+    expect(renewed.data.expiresAt).toBeTruthy();
 
     const duplicate = await session.call('agentAddressClaimAgent', { agentName: 'other' });
     expect(duplicate.isError).toBe(true);

@@ -25,7 +25,9 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
     'Create a new Agent for a new instance; resume an existing Session only with an authorized ' +
     'resume token. The user may name the Agent, Session, both, or neither. ' +
     'Always give the user the complete canonical address after registration. ' +
-    'Never reclaim a Session already held by another Runtime; choose a new address.';
+    'Never reclaim a Session already held by another Runtime; choose a new address. ' +
+    'If you are using a Session for more than 15 minutes, call agentAddressHeartbeatRuntime ' +
+    'regularly to keep its exclusive Runtime lease active.';
 
   server = new McpServer(
     { name: 'Agent Address', version: '1.0.0' },
@@ -170,6 +172,29 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
     );
   }
 
+  private registerHeartbeat(): void {
+    this.server.registerTool(
+      'agentAddressHeartbeatRuntime',
+      { description: 'Renew this active Session Runtime lease before it expires.' },
+      async () => {
+        const sessionID = await this.requireSessionID();
+        const runtimeToken = await this.ctx.storage.get<string>(AddressMCP.RUNTIME_KEY);
+
+        if (!runtimeToken) {
+          throw new Error('This Runtime does not have an ownership token.');
+        }
+
+        const result = await this.api.call<{ expiresAt: string }>(
+          'POST',
+          `/v2/account/sessions/${encodeURIComponent(sessionID)}/heartbeat`,
+          { runtimeToken },
+        );
+
+        return AddressMCP.textResult(result);
+      },
+    );
+  }
+
   private registerRelease(): void {
     this.server.registerTool(
       'agentAddressReleaseRuntime',
@@ -240,6 +265,7 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
     this.registerClaim();
     this.registerCreateSession();
     this.registerResume();
+    this.registerHeartbeat();
     this.registerRelease();
     this.registerDirectory();
   }
