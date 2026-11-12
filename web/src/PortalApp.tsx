@@ -1,8 +1,16 @@
-import { Alert, Button, Card, Col, Divider, Form, Input, Layout, List, Row, Space, Spin, Typography } from 'antd';
+import { Alert, Button, Card, Col, Layout, Row, Space, Spin, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 
-import { Agent, IdentityRegistration, PortalAPI, AccountStatus, Session } from './PortalAPI';
+import type { AccountStatus, Agent, IdentityRegistration, Session } from './PortalAPI';
+import { PortalAPI } from './PortalAPI';
 import { PortalOAuth } from './PortalOAuth';
+import {
+  AgentRegistryCard,
+  IdentityCreatedNotice,
+  OrganizationRegistrationCard,
+  SessionRegistryCard,
+} from './PortalSections';
+import type { AgentFields, OrganizationFields, SessionFields } from './PortalSections';
 
 export function PortalApp() {
   const [token, setToken] = useState<string | null>(null);
@@ -10,7 +18,7 @@ export function PortalApp() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [claim, setClaim] = useState<IdentityRegistration | null>(null);
+  const [identity, setIdentity] = useState<IdentityRegistration | null>(null);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +70,40 @@ export function PortalApp() {
     await action(async () => {
       setSelectedAgent(agent);
       setSessions(await PortalAPI.sessions(agent.id));
-      setClaim(null);
+      setIdentity(null);
+    });
+  }
+
+  async function registerOrganization(fields: OrganizationFields): Promise<void> {
+    await action(async () => {
+      await PortalAPI.registerOrganization(fields.slug, fields.displayName);
+      await refresh();
+    });
+  }
+
+  async function createAgent(fields: AgentFields): Promise<void> {
+    await action(async () => {
+      setIdentity(await PortalAPI.createAgent(
+        fields.agentName?.trim() ?? '',
+        fields.sessionName?.trim() ?? '',
+      ));
+
+      await refresh();
+    });
+  }
+
+  async function createSession(fields: SessionFields): Promise<void> {
+    if (!selectedAgent) {
+      throw new Error('Select an Agent before creating a Session.');
+    }
+
+    await action(async () => {
+      setIdentity(await PortalAPI.createSession(
+        selectedAgent.id,
+        fields.newSessionName?.trim() ?? '',
+      ));
+
+      setSessions(await PortalAPI.sessions(selectedAgent.id));
     });
   }
 
@@ -71,8 +112,9 @@ export function PortalApp() {
     setToken(null);
     setStatus(null);
     setAgents([]);
+    setSessions([]);
     setSelectedAgent(null);
-    setClaim(null);
+    setIdentity(null);
   }
 
   return (
@@ -85,7 +127,9 @@ export function PortalApp() {
 
       <Layout.Content className="admin-content">
         <Space direction="vertical" size="large" style={{ width: '100%' }}>
-          {error && <Alert type="error" message={error} showIcon closable onClose={() => setError(null)} />}
+          {error && (
+            <Alert type="error" message={error} showIcon closable onClose={() => setError(null)} />
+          )}
 
           {loading ? (
             <Spin />
@@ -110,22 +154,10 @@ export function PortalApp() {
               </Row>
 
               {!status?.organization ? (
-                <Card title="Register your Organization">
-                  <Form layout="vertical" onFinish={(values: { slug: string; displayName: string }) =>
-                    void action(async () => {
-                      await PortalAPI.registerOrganization(values.slug, values.displayName);
-                      await refresh();
-                    })}
-                  >
-                    <Form.Item label="Organization handle" name="slug" rules={[{ required: true }]}>
-                      <Input placeholder="nuwa" />
-                    </Form.Item>
-                    <Form.Item label="Display name" name="displayName" rules={[{ required: true }]}>
-                      <Input placeholder="Nuwa Information" />
-                    </Form.Item>
-                    <Button htmlType="submit" type="primary" loading={working}>Register Organization</Button>
-                  </Form>
-                </Card>
+                <OrganizationRegistrationCard
+                  loading={working}
+                  onRegister={(fields) => void registerOrganization(fields)}
+                />
               ) : (
                 <>
                   <Card title={status.organization.displayName}>
@@ -136,103 +168,25 @@ export function PortalApp() {
 
                   <Row gutter={[16, 16]}>
                     <Col xs={24} md={12}>
-                      <Card title="Your Agents">
-                        <List
-                          dataSource={agents}
-                          rowKey="id"
-                          renderItem={(agent) => (
-                            <List.Item
-                              actions={[
-                                <Button key={agent.id} onClick={() => void selectAgent(agent)}>
-                                  Sessions
-                                </Button>,
-                              ]}
-                            >
-                              <List.Item.Meta
-                                title={agent.displayName ?? agent.handle}
-                                description={agent.handle}
-                              />
-                            </List.Item>
-                          )}
-                        />
-
-                        <Divider />
-                        <Form layout="vertical" onFinish={(values: { agentName?: string; sessionName?: string }) =>
-                          void action(async () => {
-                            setClaim(await PortalAPI.createAgent(
-                              values.agentName?.trim() ?? '',
-                              values.sessionName?.trim() ?? '',
-                            ));
-                            await refresh();
-                          })}
-                        >
-                          <Typography.Title level={5}>Create an Agent</Typography.Title>
-                          <Form.Item name="agentName" label="Agent handle (optional)">
-                            <Input placeholder="xiaoming" />
-                          </Form.Item>
-                          <Form.Item name="sessionName" label="Default Session handle (optional)">
-                            <Input placeholder="main" />
-                          </Form.Item>
-                          <Button htmlType="submit" loading={working}>Create Agent</Button>
-                        </Form>
-                      </Card>
+                      <AgentRegistryCard
+                        agents={agents}
+                        loading={working}
+                        onSelect={(agent) => void selectAgent(agent)}
+                        onCreate={(fields) => void createAgent(fields)}
+                      />
                     </Col>
 
                     <Col xs={24} md={12}>
-                      <Card title={selectedAgent ? `Sessions: ${selectedAgent.handle}` : 'Sessions'}>
-                        {selectedAgent ? (
-                          <>
-                            <List
-                              dataSource={sessions}
-                              rowKey="id"
-                              renderItem={(session) => (
-                                <List.Item>
-                                  <List.Item.Meta
-                                    title={session.canonical}
-                                    description={session.isDefault ? 'Default Session' : session.displayName}
-                                  />
-                                </List.Item>
-                              )}
-                            />
-
-                            <Divider />
-                            <Form layout="vertical" onFinish={(values: { newSessionName?: string }) =>
-                              void action(async () => {
-                                setClaim(await PortalAPI.createSession(
-                                  selectedAgent.id,
-                                  values.newSessionName?.trim() ?? '',
-                                ));
-                                setSessions(await PortalAPI.sessions(selectedAgent.id));
-                              })}
-                            >
-                              <Form.Item name="newSessionName" label="New Session handle (optional)">
-                                <Input placeholder="ffl-dev" />
-                              </Form.Item>
-                              <Button htmlType="submit" loading={working}>Create Session</Button>
-                            </Form>
-                          </>
-                        ) : (
-                          <Typography.Text type="secondary">
-                            Choose an Agent to inspect its Sessions.
-                          </Typography.Text>
-                        )}
-                      </Card>
+                      <SessionRegistryCard
+                        agent={selectedAgent}
+                        sessions={sessions}
+                        loading={working}
+                        onCreate={(fields) => void createSession(fields)}
+                      />
                     </Col>
                   </Row>
 
-                  {claim && (
-                    <Alert
-                      type="success"
-                      showIcon
-                      message={'Created ' + claim.session.canonical}
-                      description={
-                        <div>
-                          <p>Save this one-time resume capability securely. A Runtime may use it to acquire the Session.</p>
-                          <p>Resume token: <code>{claim.resumeToken}</code></p>
-                        </div>
-                      }
-                    />
-                  )}
+                  {identity && <IdentityCreatedNotice identity={identity} />}
                 </>
               )}
             </>
