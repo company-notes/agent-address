@@ -117,4 +117,6 @@ npm --prefix web run build
 
 Cloudflare Workers, Durable Objects, OAuth KV, and D1 are deployed together by GitHub Actions only after the checks pass. The workflow applies D1 migrations before publishing a Worker.
 
-**Database cutover:** `migrations/0001_identity.sql` is the clean new-schema baseline for an isolated D1 database. Never apply it to the previously deployed Host/Work database. A read-only D1 preflight guard fails deployment for mixed/legacy schemas before migrations. See [Database cutover runbook](docs/deployment-cutover.md) for the manual, explicitly approved production switch. Refactoring code never authorizes deleting existing D1 data.
+**Deployment:** push to GitHub `main` to run the original `.github/workflows/deploy.yml` verification and automatic release. It uses existing GitHub Repository Secrets and Variables, resolves the canonical Cloudflare resources named `company-notes-agent-address` (D1) and `OAUTH_KV` (KV) by exact name, rejects mixed legacy database schemas, then publishes the official `agent-address` Worker. See [Operations](docs/Operations.md) for resource identities, release steps, production testing and unrelated Releasebot cleanup candidates.
+
+**Registration:** OAuth sign-up requires entering a password twice. Client-side form validation and server-side checks both reject a mismatch. This is password confirmation, not second-factor authentication.
