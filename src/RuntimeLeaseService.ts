@@ -49,19 +49,27 @@ export class RuntimeLeaseService {
     const result = await this.db.prepare(
       `INSERT INTO session_runtime_leases
         (session_id, runtime_token_hash, runtime_label, refreshed_at, expires_at)
-        VALUES (?, ?, ?, ?, ?)
+        SELECT ?, ?, ?, ?, ?
+          FROM sessions s JOIN agents a ON a.id = s.agent_id
+         WHERE s.id = ? AND s.archived_at IS NULL AND a.archived_at IS NULL
         ON CONFLICT(session_id) DO UPDATE SET
           runtime_token_hash = excluded.runtime_token_hash,
           runtime_label = excluded.runtime_label,
           refreshed_at = excluded.refreshed_at,
           expires_at = excluded.expires_at
-        WHERE session_runtime_leases.expires_at <= excluded.refreshed_at`,
+        WHERE session_runtime_leases.expires_at <= excluded.refreshed_at
+          AND EXISTS (
+            SELECT 1 FROM sessions s JOIN agents a ON a.id = s.agent_id
+            WHERE s.id = excluded.session_id
+              AND s.archived_at IS NULL AND a.archived_at IS NULL
+          )`,
     ).bind(
       sessionID,
       tokenHash,
       runtimeLabel,
       now.toISOString(),
       expiresAt,
+      sessionID,
     ).run();
 
     if (result.meta.changes !== 1) {
@@ -84,7 +92,12 @@ export class RuntimeLeaseService {
     const result = await this.db.prepare(
       `UPDATE session_runtime_leases
           SET refreshed_at = ?, expires_at = ?
-        WHERE session_id = ? AND runtime_token_hash = ? AND expires_at > ?`,
+        WHERE session_id = ? AND runtime_token_hash = ? AND expires_at > ?
+          AND EXISTS (
+            SELECT 1 FROM sessions s JOIN agents a ON a.id = s.agent_id
+            WHERE s.id = session_runtime_leases.session_id
+              AND s.archived_at IS NULL AND a.archived_at IS NULL
+          )`,
     ).bind(now.toISOString(), expiresAt, sessionID, tokenHash, now.toISOString()).run();
 
     if (result.meta.changes !== 1) {
