@@ -173,4 +173,74 @@ describe('real MCP client authenticates through OAuth and uses the shared API', 
     await first.close();
     await second.close();
   });
+  it('auto-claims a persona address after OAuth without prompting for Organization or secrets', async () => {
+    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
+    const session = await MCPTestSession.connect(accessToken);
+
+    const created = await session.call('agentAddressEnsureIdentity', {
+      agentDisplayName: '小晴',
+    });
+
+    expect(created.isError).toBe(false);
+    expect(created.data.session.canonical).toMatch(
+      /^personal-[a-f0-9]{12}\/agent-[a-f0-9]{8}\/main$/,
+    );
+    expect(created.text).not.toMatch(/runtimeToken|resumeToken|runtime_|resume_/);
+    expect(created.data.created).toBe(true);
+
+    const again = await session.call('agentAddressEnsureIdentity');
+
+    expect(again.isError).toBe(false);
+    expect(again.data.created).toBe(false);
+    expect(again.data.session.id).toBe(created.data.session.id);
+    expect(again.data.session.canonical).toBe(created.data.session.canonical);
+
+    const agents = await session.call('agentAddressListAgents');
+    expect(agents.data).toHaveLength(1);
+    expect(agents.data[0].displayName).toBe('小晴');
+
+    const released = await session.call('agentAddressReleaseRuntime');
+    expect(released.isError).toBe(false);
+
+    const restored = await session.call('agentAddressEnsureIdentity');
+    expect(restored.isError).toBe(false);
+    expect(restored.data.session.id).toBe(created.data.session.id);
+    expect(restored.data.session.canonical).toBe(created.data.session.canonical);
+    expect(restored.text).not.toMatch(/runtimeToken|resumeToken|runtime_|resume_/);
+
+    await session.close();
+  });
+
+  it('keeps independent Agent installations separate under the same OAuth Account', async () => {
+    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
+    const first = await MCPTestSession.connect(accessToken);
+    const second = await MCPTestSession.connect(accessToken);
+
+    const xiaoqing = await first.call('agentAddressEnsureIdentity', {
+      agentDisplayName: '小晴',
+    });
+    const daxiong = await second.call('agentAddressEnsureIdentity', {
+      agentDisplayName: '大熊',
+    });
+
+    expect(xiaoqing.isError).toBe(false);
+    expect(daxiong.isError).toBe(false);
+    expect(xiaoqing.data.session.agentId).not.toBe(daxiong.data.session.agentId);
+    expect(xiaoqing.data.session.id).not.toBe(daxiong.data.session.id);
+
+    await first.close();
+    await second.close();
+  });
+
+  it('never includes Runtime or Resume credentials in model-facing tool definitions', async () => {
+    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
+    const session = await MCPTestSession.connect(accessToken);
+    const schema = (await session.listToolNames()).join(' ');
+
+    expect(schema).toContain('agentAddressEnsureIdentity');
+    expect(schema).not.toContain('agentAddressResumeWithToken');
+
+    await session.close();
+  });
+
 });
