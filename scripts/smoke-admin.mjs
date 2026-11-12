@@ -23,13 +23,13 @@ const htmlResponse = await get('/admin/');
 assert.equal(htmlResponse.status, 200, 'Admin shell must return HTTP 200, not redirect to public root');
 const html = await htmlResponse.text();
 assert.match(html, /<div id="root"><\/div>/, 'Admin shell must render the React mount point');
-assert.match(html, /\/admin\/assets\/[^"' ]+\.js/, 'Admin shell must link prefixed JavaScript');
-const scripts = [...html.matchAll(/\/admin\/assets\/[^"' ]+\.js/g)].map(x => x[0]);
-const styles = [...html.matchAll(/\/admin\/assets\/[^"' ]+\.css/g)].map(x => x[0]);
+assert.match(html, /\/ui\/assets\/[^"' ]+\.js/, 'Admin shell must link prefixed JavaScript');
+const scripts = [...html.matchAll(/\/ui\/assets\/[^"' ]+\.js/g)].map(x => x[0]);
+const styles = [...html.matchAll(/\/ui\/assets\/[^"' ]+\.css/g)].map(x => x[0]);
 assert(scripts.length > 0, 'At least one JS bundle must be linked');
 for (const asset of [...scripts, ...styles]) {
   const response = await get(asset);
-  assert.equal(response.status, 200, 'Admin bundled asset must be available: ' + asset);
+  assert.equal(response.status, 200, 'UI bundled asset must be available: ' + asset);
 }
 
 const forbidden = await get('/admin/api/accounts');
