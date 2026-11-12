@@ -182,7 +182,7 @@ export class IdentityService {
     const agentID = crypto.randomUUID();
     const sessionID = crypto.randomUUID();
     const agentHandle = IdentityService.handle(input.agentName, 'agent');
-    const sessionHandle = IdentityService.handle(input.sessionName, 'session');
+    const sessionHandle = IdentityNames.handle(input.sessionName ?? 'main');
     const createdAt = new Date().toISOString();
 
     const resumeToken = TokenService.randomToken('resume');
