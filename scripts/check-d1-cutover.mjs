@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
 export class D1CutoverGuard {
-  static CURRENT_TABLES = [
+  static CORE_TABLES = [
     'accounts',
     'admin_audit',
     'agents',
@@ -12,6 +12,8 @@ export class D1CutoverGuard {
     'session_runtime_leases',
     'sessions',
   ];
+
+  static OFFICE_TABLES = ['agent_registration_requests'];
 
   static SQLITE_QUERY =
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name";
@@ -57,7 +59,7 @@ export class D1CutoverGuard {
     return commands[0].results.map((row) => row.name);
   }
 
-  static assertSafe(tables) {
+  static assertSafe(tables, requireOfficeMigration = false) {
     const productTables = tables.filter((name) =>
       name !== 'd1_migrations' && name !== '_cf_METADATA' && name !== '_cf_KV',
     );
@@ -67,8 +69,8 @@ export class D1CutoverGuard {
       return;
     }
 
-    const expected = new Set(this.CURRENT_TABLES);
-    const missing = this.CURRENT_TABLES.filter((table) => !productTables.includes(table));
+    const expected = new Set([...this.CORE_TABLES, ...this.OFFICE_TABLES]);
+    const missing = this.CORE_TABLES.filter((table) => !productTables.includes(table));
     const incompatible = productTables.filter((table) => !expected.has(table));
 
     if (missing.length > 0 || incompatible.length > 0) {
@@ -79,6 +81,10 @@ export class D1CutoverGuard {
       );
     }
 
+    if (requireOfficeMigration && this.OFFICE_TABLES.some((table) => !productTables.includes(table))) {
+      throw new Error('D1 schema cutover refused: office Agent registration migration is not applied.');
+    }
+
     console.log('D1 schema cutover: current Agent/Session schema verified.');
   }
 
@@ -86,7 +92,7 @@ export class D1CutoverGuard {
     const mode = this.getMode(args);
     const tables = this.readTables(mode, this.getPersistTo(args));
 
-    this.assertSafe(tables);
+    this.assertSafe(tables, args.includes('--require-office-migration'));
   }
 }
 

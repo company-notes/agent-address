@@ -1,10 +1,23 @@
 import { spawnSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 
 class AuditReporter {
   static MAX_BUFFER = 32 * 1024 * 1024;
 
+  static npmInvocation(nodeExecutable = process.execPath, npmCLIPath = process.env.npm_execpath) {
+    if (!npmCLIPath || !npmCLIPath.trim()) {
+      throw new Error('npm CLI entrypoint is unavailable. Run the audit through npm run audit:check.');
+    }
+
+    return {
+      executable: nodeExecutable,
+      arguments: [npmCLIPath, 'audit', '--json'],
+    };
+  }
+
   static readReport() {
-    const result = spawnSync('npm', ['audit', '--json'], {
+    const invocation = this.npmInvocation();
+    const result = spawnSync(invocation.executable, invocation.arguments, {
       encoding: 'utf8',
       maxBuffer: this.MAX_BUFFER,
     });
@@ -73,9 +86,13 @@ class AuditReporter {
   }
 }
 
-try {
-  AuditReporter.run(process.argv.includes('--enforce'));
-} catch (error) {
-  console.error('Unable to complete npm audit:', error);
-  process.exitCode = 2;
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  try {
+    AuditReporter.run(process.argv.includes('--enforce'));
+  } catch (error) {
+    console.error('Unable to complete npm audit:', error);
+    process.exitCode = 2;
+  }
 }
+
+export { AuditReporter };

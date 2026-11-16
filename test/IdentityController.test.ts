@@ -1,3 +1,4 @@
+import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 
 import { TestClient } from './Helpers';
@@ -73,6 +74,64 @@ describe('identity account API boundaries', () => {
     const duplicate = await client.createAgent(accessToken, 'xiaoming', 'another');
     expect(duplicate.status).toBe(409);
     expect(duplicate.body.error.code).toBe('identity_name_taken');
+  });
+
+  it('keeps the same managed coworker Agent across a lost registration response and retry', async () => {
+    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
+    const slug = TestClient.uniqueName('office');
+    await client.registerOrganization(accessToken, slug);
+
+    const endpoint = '/v2/account/agent-registrations/office-test-native-001';
+    const body = {
+      agentName: 'office-bear', agentDisplayName: '大熊', sessionName: 'main',
+    };
+    const first = await client.call('PUT', endpoint, { token: accessToken, body });
+    expect(first.status).toBe(200);
+    expect(first.body.data.session.canonical).toBe(slug + '/office-bear/main');
+    expect(first.body.data.resumeToken).toBeUndefined();
+    expect(first.body.data.runtimeToken).toBeUndefined();
+
+    // The first API response is treated as lost. The same request ID must
+    // return the immutable Session, without creating a second Agent.
+    const repeated = await client.call('PUT', endpoint, { token: accessToken, body });
+    expect(repeated.status).toBe(200);
+    expect(repeated.body.data).toEqual(first.body.data);
+
+    const directory = await client.call('GET', '/v2/account/agents', {
+      token: accessToken,
+    });
+    expect(directory.body.data).toHaveLength(1);
+    expect(directory.body.data[0].defaultSessionID).toBe(first.body.data.session.id);
+
+    const persisted = await env.DB.prepare(
+      'SELECT COUNT(*) AS count FROM agent_registration_requests WHERE registration_id = ?',
+    ).bind('office-test-native-001').first<{ count: number }>();
+    expect(persisted?.count).toBe(1);
+
+    const altered = await client.call('PUT', endpoint, {
+      token: accessToken,
+      body: { ...body, agentDisplayName: '冒名頂替' },
+    });
+    expect(altered.status).toBe(409);
+    expect(altered.body.error.code).toBe('agent_registration_conflict');
+
+    const stolen = await client.call('PUT',
+      '/v2/account/agent-registrations/office-test-native-002', {
+        token: accessToken, body,
+      });
+    expect(stolen.status).toBe(409);
+    expect(stolen.body.error.code).toBe('identity_name_taken');
+
+    const anotherAccount = await OAuthTestFlow.signUpAndGetToken();
+    const anotherSlug = TestClient.uniqueName('office2');
+    await client.registerOrganization(anotherAccount.accessToken, anotherSlug);
+    const independent = await client.call('PUT', endpoint, {
+      token: anotherAccount.accessToken, body,
+    });
+    expect(independent.status).toBe(200);
+    expect(independent.body.data.session.canonical).toBe(
+      anotherSlug + '/office-bear/main');
+    expect(independent.body.data.session.id).not.toBe(first.body.data.session.id);
   });
 
   it('treats ten assistants hosted by one bot as ten Agents with independent main Sessions', async () => {
