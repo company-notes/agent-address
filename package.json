@@ -12,7 +12,7 @@
     "db:migrate:remote": "wrangler d1 migrations apply agent-address --remote",
     "check": "tsc --noEmit",
     "style:check": "node scripts/check-code-principles.mjs",
-    "test": "vitest run && node --test scripts/audit-report.checks.mjs",
+    "test": "vitest run && node --test scripts/audit-report.checks.mjs scripts/DeploymentWorkflow.checks.mjs",
     "audit:report": "node scripts/audit-report.mjs",
     "audit:check": "node scripts/audit-report.mjs --enforce"
   },
