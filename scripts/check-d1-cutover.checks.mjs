@@ -1,6 +1,26 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { D1CutoverGuard } from './check-d1-cutover.mjs';
+import { D1CutoverGuard, WranglerD1Runner } from './check-d1-cutover.mjs';
+
+test('D1 schema guard launches the local Wrangler JavaScript CLI with the running Node', () => {
+  const invocation = WranglerD1Runner.invocation(
+    ['d1', 'execute', 'DB'],
+    'C:\\Program Files\\nodejs\\node.exe',
+    'C:\\repo\\node_modules\\wrangler\\wrangler-dist\\cli.js',
+  );
+
+  assert.deepEqual(invocation, {
+    executable: 'C:\\Program Files\\nodejs\\node.exe',
+    arguments: [
+      'C:\\repo\\node_modules\\wrangler\\wrangler-dist\\cli.js',
+      'd1',
+      'execute',
+      'DB',
+    ],
+  });
+  assert.notEqual(invocation.executable, 'npx');
+  assert.notEqual(invocation.executable, 'npx.cmd');
+});
 
 test('empty Cloudflare D1 includes provider-managed metadata but is safe', () => {
   assert.doesNotThrow(() => D1CutoverGuard.assertSafe(['_cf_KV']));
@@ -28,7 +48,7 @@ test('office Agent registration migration preserves the current identity databas
 test('legacy, mixed, partial or unknown schemas are always rejected', () => {
   const cases = [
     ['_cf_KV', 'addresses', 'enrollments'],
-    ['_cf_KV', ...D1CutoverGuard.CURRENT_TABLES, 'paired_hosts'],
+    ['_cf_KV', ...D1CutoverGuard.CORE_TABLES, 'paired_hosts'],
     ['_cf_KV', 'organizations', 'accounts'],
     ['_cf_UNRECOGNIZED'],
   ];
