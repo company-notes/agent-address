@@ -290,6 +290,79 @@ export class IdentityService {
     };
   }
 
+  /**
+   * Organization-owned Bot enrollment is idempotent by immutable registration ID.
+   * The regular self-managed claim/Resume routes still own Runtime capabilities.
+   */
+  async registerOfficeAgent(
+    accountID: string, registrationID: string, input: NewAgentInput,
+  ): Promise<{ session: PublicSession }> {
+    const org = await this.organization(accountID);
+    const agentHandle = IdentityNames.handle(input.agentName!);
+    const sessionHandle = IdentityNames.handle(input.sessionName ?? 'main');
+
+    const existing = await this.db.prepare(
+      `SELECT agent_id AS agentID, session_id AS sessionID,
+              agent_handle AS agentHandle, agent_display_name AS agentDisplayName,
+              session_handle AS sessionHandle
+         FROM agent_registration_requests
+        WHERE org_id = ? AND registration_id = ?`,
+    ).bind(org.id, registrationID).first<{
+      agentID: string; sessionID: string; agentHandle: string;
+      agentDisplayName: string; sessionHandle: string;
+    }>();
+
+    if (existing) {
+      if (existing.agentHandle !== agentHandle ||
+          existing.agentDisplayName !== input.agentDisplayName ||
+          existing.sessionHandle !== sessionHandle) {
+        throw new ApplicationError(409, 'agent_registration_conflict',
+          'An office registration ID already belongs to another identity.');
+      }
+
+      const agent = await this.requireAgent(org.id, existing.agentID);
+      const session = await this.requireSession(org.id, existing.sessionID);
+
+      if (agent.handle !== agentHandle || agent.displayName !== input.agentDisplayName ||
+          session.agentId !== agent.id || session.sessionHandle !== sessionHandle ||
+          session.isDefault !== 1) {
+        throw new ApplicationError(409, 'agent_registration_conflict',
+          'The registered office identity no longer matches its original assignment.');
+      }
+
+      return { session: IdentityService.publicSession(org.slug, session) };
+    }
+
+    const prepared = await this.prepareAgent(accountID, input);
+    const agentID = prepared.session.agentId;
+    const sessionID = prepared.session.id;
+
+    try {
+      await this.db.batch([
+        ...prepared.statements,
+        this.db.prepare(
+          `INSERT INTO agent_registration_requests
+             (org_id, registration_id, agent_id, session_id, agent_handle,
+              agent_display_name, session_handle, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(org.id, registrationID, agentID, sessionID, agentHandle,
+          input.agentDisplayName!, sessionHandle, new Date().toISOString()),
+      ]);
+    } catch (error) {
+      const winner = await this.db.prepare(
+        'SELECT agent_id AS agentID FROM agent_registration_requests WHERE org_id = ? AND registration_id = ?',
+      ).bind(org.id, registrationID).first<{ agentID: string }>();
+
+      if (winner) {
+        return this.registerOfficeAgent(accountID, registrationID, input);
+      }
+
+      IdentityService.duplicateName(error);
+    }
+
+    return { session: prepared.session };
+  }
+
   async registerAgent(accountID: string, input: NewAgentInput): Promise<RegisteredIdentity> {
     return this.register(await this.prepareAgent(accountID, input));
   }
