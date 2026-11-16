@@ -89,6 +89,25 @@ export class IdentityController {
       );
     }
 
+    if (resource === 'agent-registrations' && identifier &&
+        segments.length === 4 && method === 'PUT') {
+      if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(identifier)) {
+        throw new ApplicationError(400, 'invalid_registration_id',
+          'Registration ID must be a stable lowercase identifier.');
+      }
+
+      const data = await RequestData.readJSON(request);
+      const input: NewAgentInput = {
+        agentName: RequestData.requiredString(data, 'agentName', 64),
+        agentDisplayName: RequestData.requiredString(data, 'agentDisplayName', 120),
+        sessionName: RequestData.optionalString(data, 'sessionName', 64) ?? 'main',
+      };
+
+      return ResponseData.ok(
+        await this.services.identities.registerOfficeAgent(accountID, identifier, input),
+      );
+    }
+
     if (resource === 'agents' && segments.length === 3) {
       if (method === 'GET') {
         return ResponseData.ok(await this.services.identities.listAgents(accountID));
