@@ -17,6 +17,9 @@ test('office Agent registration migration preserves the current identity databas
   const schema = [...D1CutoverGuard.CORE_TABLES, ...D1CutoverGuard.OFFICE_TABLES];
 
   assert.doesNotThrow(() => D1CutoverGuard.assertSafe(schema));
+  assert.doesNotThrow(() => D1CutoverGuard.assertSafe(schema, true));
+  assert.throws(() => D1CutoverGuard.assertSafe(D1CutoverGuard.CORE_TABLES, true),
+    /office Agent registration migration/);
   assert.throws(() => D1CutoverGuard.assertSafe([
     ...schema, 'unrelated_office_tokens',
   ]), /cutover refused/i);
