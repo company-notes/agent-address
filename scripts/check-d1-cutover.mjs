@@ -59,7 +59,7 @@ export class D1CutoverGuard {
     return commands[0].results.map((row) => row.name);
   }
 
-  static assertSafe(tables) {
+  static assertSafe(tables, requireOfficeMigration = false) {
     const productTables = tables.filter((name) =>
       name !== 'd1_migrations' && name !== '_cf_METADATA' && name !== '_cf_KV',
     );
@@ -81,6 +81,10 @@ export class D1CutoverGuard {
       );
     }
 
+    if (requireOfficeMigration && this.OFFICE_TABLES.some((table) => !productTables.includes(table))) {
+      throw new Error('D1 schema cutover refused: office Agent registration migration is not applied.');
+    }
+
     console.log('D1 schema cutover: current Agent/Session schema verified.');
   }
 
@@ -88,7 +92,7 @@ export class D1CutoverGuard {
     const mode = this.getMode(args);
     const tables = this.readTables(mode, this.getPersistTo(args));
 
-    this.assertSafe(tables);
+    this.assertSafe(tables, args.includes('--require-office-migration'));
   }
 }
 
