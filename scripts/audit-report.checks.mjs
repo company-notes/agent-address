@@ -18,6 +18,6 @@ test('npm audit launches the npm JavaScript CLI with the running Node on Windows
     assert.notEqual(invocation.executable, 'npm');
     assert.notEqual(invocation.executable, 'npm.cmd');
   }
-  assert.throws(() => AuditReporter.npmInvocation(process.execPath, undefined),
+  assert.throws(() => AuditReporter.npmInvocation(process.execPath, ''),
     /npm CLI entrypoint is unavailable/);
 });
