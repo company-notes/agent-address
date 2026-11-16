@@ -147,6 +147,8 @@ jobs:
         run: node scripts/check-d1-cutover.mjs --remote
       - name: Apply D1 migrations
         run: npx wrangler d1 migrations apply DB --remote --config .wrangler.deploy.jsonc
+      - name: Require office Agent registration schema after migration
+        run: node scripts/check-d1-cutover.mjs --remote --require-office-migration
       - name: Deploy Cloudflare Worker
         run: npx wrangler deploy --config .wrangler.deploy.jsonc
 
