@@ -121,6 +121,17 @@ describe('identity account API boundaries', () => {
       });
     expect(stolen.status).toBe(409);
     expect(stolen.body.error.code).toBe('identity_name_taken');
+
+    const anotherAccount = await OAuthTestFlow.signUpAndGetToken();
+    const anotherSlug = TestClient.uniqueName('office2');
+    await client.registerOrganization(anotherAccount.accessToken, anotherSlug);
+    const independent = await client.call('PUT', endpoint, {
+      token: anotherAccount.accessToken, body,
+    });
+    expect(independent.status).toBe(200);
+    expect(independent.body.data.session.canonical).toBe(
+      anotherSlug + '/office-bear/main');
+    expect(independent.body.data.session.id).not.toBe(first.body.data.session.id);
   });
 
   it('treats ten assistants hosted by one bot as ten Agents with independent main Sessions', async () => {
