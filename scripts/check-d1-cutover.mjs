@@ -1,7 +1,28 @@
 #!/usr/bin/env node
 // Read-only safety gate before migrating or deploying the new Agent/Session schema.
 import { execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
+
+const require = createRequire(import.meta.url);
+
+export class WranglerD1Runner {
+  static invocation(argumentsList, nodeExecutable = process.execPath, wranglerCLIPath = require.resolve('wrangler')) {
+    return {
+      executable: nodeExecutable,
+      arguments: [wranglerCLIPath, ...argumentsList],
+    };
+  }
+
+  static execute(argumentsList) {
+    const invocation = this.invocation(argumentsList);
+
+    return execFileSync(invocation.executable, invocation.arguments, {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  }
+}
 
 export class D1CutoverGuard {
   static CORE_TABLES = [
@@ -36,9 +57,7 @@ export class D1CutoverGuard {
   }
 
   static readTables(mode, extraArgs) {
-    const output = execFileSync('npx', [
-      '--no-install',
-      'wrangler',
+    const output = WranglerD1Runner.execute([
       'd1',
       'execute',
       'DB',
@@ -49,7 +68,7 @@ export class D1CutoverGuard {
       this.SQLITE_QUERY,
       '--json',
       ...extraArgs,
-    ], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    ]);
 
     const commands = JSON.parse(output);
     if (!Array.isArray(commands) || commands.length !== 1 || !Array.isArray(commands[0].results)) {
