@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
 export class D1CutoverGuard {
-  static CURRENT_TABLES = [
+  static CORE_TABLES = [
     'accounts',
     'admin_audit',
     'agents',
@@ -12,6 +12,8 @@ export class D1CutoverGuard {
     'session_runtime_leases',
     'sessions',
   ];
+
+  static OFFICE_TABLES = ['agent_registration_requests'];
 
   static SQLITE_QUERY =
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name";
@@ -67,8 +69,8 @@ export class D1CutoverGuard {
       return;
     }
 
-    const expected = new Set(this.CURRENT_TABLES);
-    const missing = this.CURRENT_TABLES.filter((table) => !productTables.includes(table));
+    const expected = new Set([...this.CORE_TABLES, ...this.OFFICE_TABLES]);
+    const missing = this.CORE_TABLES.filter((table) => !productTables.includes(table));
     const incompatible = productTables.filter((table) => !expected.has(table));
 
     if (missing.length > 0 || incompatible.length > 0) {
