@@ -23,11 +23,14 @@ export class IdentityController {
       return ResponseData.ok({ grantFingerprint: identity.grantFingerprint });
     }
 
-    return this.handleAuthenticated(identity.accountId, request, identity.authVersion);
+    return this.handleAuthenticated(identity.accountId, request, identity.authVersion,
+      identity.grantFingerprint);
   }
 
-  async handleAuthenticated(accountID: string, request: Request, authVersion = 0): Promise<Response> {
-    await this.services.accounts.assertAuthVersion(accountID, authVersion);
+  async handleAuthenticated(
+    accountID: string, request: Request, authVersion = 0, grantFingerprint?: string,
+  ): Promise<Response> {
+    const account = await this.services.accounts.assertAuthVersion(accountID, authVersion);
 
     const url = new URL(request.url);
     const segments = url.pathname.split('/').filter(Boolean);
@@ -39,14 +42,15 @@ export class IdentityController {
     }
 
     if (method === 'GET' && resource === 'status' && segments.length === 3) {
-      const account = await this.services.accounts.getAccount(accountID);
       const organization = account.orgId
-        ? await this.services.organizations.getForAccount(accountID)
+        ? await this.services.organizations.getByID(account.orgId)
         : null;
 
       return ResponseData.ok({
         account: { email: account.email },
         organization,
+        ...(url.searchParams.get('include_grant') === '1' && grantFingerprint
+          ? { grantFingerprint } : {}),
       });
     }
 
@@ -220,7 +224,10 @@ export class IdentityController {
     const runtimeToken = RequestData.requiredString(data, 'runtimeToken', 256);
 
     if (request.method === 'PATCH') {
-      return ResponseData.ok(await this.services.identities.renew(accountID, sessionID, runtimeToken));
+      const lease = await this.services.identities.renewWithIdentity(accountID, sessionID, runtimeToken);
+
+      return ResponseData.ok(new URL(request.url).searchParams.get('include_identity') === '1'
+        ? lease : { expiresAt: lease.expiresAt });
     }
 
     if (request.method === 'DELETE') {

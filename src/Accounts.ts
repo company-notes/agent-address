@@ -155,11 +155,13 @@ export class AccountService {
     return AccountService.publicAccount(row);
   }
 
-  async assertAuthVersion(accountID: string, authVersion: number): Promise<void> {
+  async assertAuthVersion(accountID: string, authVersion: number): Promise<AccountRow> {
     const account = await this.getAccount(accountID);
 
     if (account.authVersion !== authVersion) {
       throw new ApplicationError(401, 'authorization_revoked', 'This account must sign in again.');
     }
+
+    return account;
   }
 }

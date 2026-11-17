@@ -504,11 +504,24 @@ export class IdentityService {
     };
   }
 
-  async renew(accountID: string, sessionID: string, runtimeToken: string): Promise<{ expiresAt: string }> {
+  async renewWithIdentity(accountID: string, sessionID: string, runtimeToken: string) {
     const org = await this.organization(accountID);
-    await this.requireSession(org.id, sessionID);
+    const session = await this.requireSession(org.id, sessionID);
+    const lease = await this.leases.renew(sessionID, runtimeToken);
 
-    return this.leases.renew(sessionID, runtimeToken);
+    return {
+      expiresAt: lease.expiresAt,
+      organization: { id: org.id, slug: org.slug },
+      session: IdentityService.publicSession(org.slug, {
+        ...session, leaseExpiresAt: lease.expiresAt,
+      }),
+    };
+  }
+
+  async renew(accountID: string, sessionID: string, runtimeToken: string): Promise<{ expiresAt: string }> {
+    const { expiresAt } = await this.renewWithIdentity(accountID, sessionID, runtimeToken);
+
+    return { expiresAt };
   }
 
   async release(accountID: string, sessionID: string, runtimeToken: string): Promise<PublicSession> {
