@@ -168,6 +168,54 @@ describe('Organization identity lifecycle (real OAuth, Worker and D1)', () => {
     expect(recovered.status).toBe(200);
   });
 
+  it('recovers an idle address for its Organization owner without changing Agent or Session IDs', async () => {
+    const owner = await OAuthTestFlow.signUpAndGetToken();
+    const outsider = await OAuthTestFlow.signUpAndGetToken();
+    const slug = TestClient.uniqueName('recovery');
+    await client.registerOrganization(owner.accessToken, slug);
+    await client.registerOrganization(outsider.accessToken, TestClient.uniqueName('other'));
+
+    const original = await client.createAgent(owner.accessToken, 'gateway', 'main');
+    const sessionID = original.body.data.session.id;
+    const endpoint = `/v2/account/sessions/${sessionID}/owner-runtime-lease`;
+
+    const busy = await client.call('PUT', endpoint, { token: owner.accessToken });
+    expect(busy.status).toBe(409);
+    expect(busy.body.error.code).toBe('session_in_use');
+
+    const released = await client.call('DELETE',
+      `/v2/account/sessions/${sessionID}/runtime-lease`, {
+        token: owner.accessToken,
+        body: { runtimeToken: original.body.data.runtimeToken },
+      });
+    expect(released.status).toBe(200);
+
+    const foreign = await client.call('PUT', endpoint, { token: outsider.accessToken });
+    expect(foreign.status).toBe(404);
+
+    const recovered = await client.call('PUT', endpoint, { token: owner.accessToken });
+    expect(recovered.status).toBe(200);
+    expect(recovered.body.data.session).toMatchObject({
+      id: sessionID,
+      agentId: original.body.data.session.agentId,
+      canonical: `${slug}/gateway/main`,
+    });
+    expect(recovered.body.data.resumeToken).not.toBe(original.body.data.resumeToken);
+
+    const oldCapability = await client.call('PUT',
+      `/v2/account/sessions/${sessionID}/runtime-lease`, {
+        token: owner.accessToken,
+        body: { resumeToken: original.body.data.resumeToken },
+      });
+    expect(oldCapability.status).toBe(403);
+    expect(oldCapability.body.error.code).toBe('invalid_resume_token');
+
+    const agents = await client.call('GET', '/v2/account/agents', {
+      token: owner.accessToken,
+    });
+    expect(agents.body.data).toHaveLength(1);
+  });
+
   it('blocks another Organization from modifying, archiving, or rotating an Agent Session', async () => {
     const first = await OAuthTestFlow.signUpAndGetToken();
     const second = await OAuthTestFlow.signUpAndGetToken();
