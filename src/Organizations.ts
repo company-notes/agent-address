@@ -8,11 +8,19 @@ export type OrganizationRow = {
   createdAt: string;
 };
 
+export type OrganizationScope = {
+  accountID: string;
+  organization: OrganizationRow | null;
+};
+
 export class OrganizationService {
   private static readonly SELECT = `SELECT id, slug, display_name AS displayName,
     created_at AS createdAt FROM organizations`;
 
-  constructor(private readonly db: D1Database) {}
+  constructor(
+    private readonly db: D1Database,
+    private readonly scope?: OrganizationScope,
+  ) {}
 
   async getByID(id: string): Promise<OrganizationRow> {
     const organization = await this.db.prepare(
@@ -27,7 +35,9 @@ export class OrganizationService {
   }
 
   async getForAccount(accountID: string): Promise<OrganizationRow> {
-    const organization = await this.db.prepare(
+    const organization = this.scope?.accountID === accountID
+      ? this.scope.organization
+      : await this.db.prepare(
       `${OrganizationService.SELECT}
         WHERE id = (SELECT org_id FROM accounts WHERE id = ?)`,
     ).bind(accountID).first<OrganizationRow>();

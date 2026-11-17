@@ -83,28 +83,32 @@ export class RuntimeLeaseService {
     return { runtimeToken, expiresAt };
   }
 
-  async renew(sessionID: string, runtimeToken: string): Promise<{ expiresAt: string }> {
+  async prepareRenewal(
+    organizationID: string, sessionID: string, runtimeToken: string,
+  ): Promise<{ statement: D1PreparedStatement; expiresAt: string }> {
     const now = new Date();
     const expiresAt = RuntimeLeaseService.expiration(now);
     const tokenHash = await TokenService.sha256Hex(runtimeToken);
 
-    // A former holder may renew only if no resume has replaced its token.
-    const result = await this.db.prepare(
+    // The batch may renew only an active Session in the authorized Organization.
+    const statement = this.db.prepare(
       `UPDATE session_runtime_leases
           SET refreshed_at = ?, expires_at = ?
         WHERE session_id = ? AND runtime_token_hash = ? AND expires_at > ?
           AND EXISTS (
             SELECT 1 FROM sessions s JOIN agents a ON a.id = s.agent_id
-            WHERE s.id = session_runtime_leases.session_id
+            WHERE s.id = session_runtime_leases.session_id AND a.org_id = ?
               AND s.archived_at IS NULL AND a.archived_at IS NULL
           )`,
-    ).bind(now.toISOString(), expiresAt, sessionID, tokenHash, now.toISOString()).run();
+    ).bind(now.toISOString(), expiresAt, sessionID, tokenHash, now.toISOString(), organizationID);
 
+    return { statement, expiresAt };
+  }
+
+  requireRenewed(result: D1Result): void {
     if (result.meta.changes !== 1) {
       throw new ApplicationError(409, 'runtime_not_owner', 'This Runtime no longer owns the Session.');
     }
-
-    return { expiresAt };
   }
 
   async release(sessionID: string, runtimeToken: string): Promise<void> {

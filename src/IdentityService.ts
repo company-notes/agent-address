@@ -163,18 +163,26 @@ export class IdentityService {
     return agent;
   }
 
-  private async requireSession(orgID: string, sessionID: string): Promise<SessionRow> {
-    const session = await this.db.prepare(
+  private sessionStatement(orgID: string, sessionID: string): D1PreparedStatement {
+    return this.db.prepare(
       `${IdentityService.SESSION_SELECT}
        WHERE a.org_id = ? AND s.id = ?
          AND a.archived_at IS NULL AND s.archived_at IS NULL`,
-    ).bind(orgID, sessionID).first<SessionRow>();
+    ).bind(orgID, sessionID);
+  }
 
+  private static requireSessionRow(session: SessionRow | null | undefined): SessionRow {
     if (!session) {
       throw new ApplicationError(404, 'session_not_found', 'Session not found in your Organization.');
     }
 
     return session;
+  }
+
+  private async requireSession(orgID: string, sessionID: string): Promise<SessionRow> {
+    return IdentityService.requireSessionRow(
+      await this.sessionStatement(orgID, sessionID).first<SessionRow>(),
+    );
   }
 
   private async prepareAgent(accountID: string, input: NewAgentInput): Promise<PreparedIdentity> {
@@ -506,8 +514,13 @@ export class IdentityService {
 
   async renewWithIdentity(accountID: string, sessionID: string, runtimeToken: string) {
     const org = await this.organization(accountID);
-    const session = await this.requireSession(org.id, sessionID);
-    const lease = await this.leases.renew(sessionID, runtimeToken);
+    const lease = await this.leases.prepareRenewal(org.id, sessionID, runtimeToken);
+
+    const [read, renewed] = await this.db.batch<SessionRow>([
+      this.sessionStatement(org.id, sessionID), lease.statement,
+    ]);
+    const session = IdentityService.requireSessionRow(read.results[0]);
+    this.leases.requireRenewed(renewed);
 
     return {
       expiresAt: lease.expiresAt,

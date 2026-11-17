@@ -12,6 +12,13 @@ describe('identity account API boundaries', () => {
     expect(anonymous.status).toBe(401);
 
     const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
+    const status = await client.call('GET', '/v2/account/status?include_grant=1', {
+      token: accessToken,
+    });
+    expect(status.status).toBe(200);
+    expect(status.body.data.organization).toBeNull();
+    expect(status.body.data.grantFingerprint).toBeTruthy();
+
     const unlinked = await client.createAgent(accessToken, 'releasebot', 'main');
     expect(unlinked.status).toBe(409);
     expect(unlinked.body.error.code).toBe('no_organization');
@@ -265,6 +272,19 @@ describe('identity account API boundaries', () => {
       body: { resumeToken: agent.body.data.resumeToken },
     });
     expect(resume.status).toBe(404);
+
+    const foreignRenewal = await client.call('PATCH',
+      `/v2/account/sessions/${sessionID}/runtime-lease?include_identity=1`, {
+        token: foreign.accessToken, body: { runtimeToken: agent.body.data.runtimeToken },
+      });
+    expect(foreignRenewal.status).toBe(404);
+
+    const ownerRenewal = await client.call('PATCH',
+      `/v2/account/sessions/${sessionID}/runtime-lease?include_identity=1`, {
+        token: owner.accessToken, body: { runtimeToken: agent.body.data.runtimeToken },
+      });
+    expect(ownerRenewal.status).toBe(200);
+    expect(ownerRenewal.body.data.session.id).toBe(sessionID);
 
     const resolved = await client.call(
       'GET',

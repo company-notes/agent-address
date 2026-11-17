@@ -12,13 +12,16 @@ describe('Organization identity lifecycle (real OAuth, Worker and D1)', () => {
     const slug = TestClient.uniqueName('rename');
     await client.registerOrganization(accessToken, slug);
 
-    const created = await client.call('POST', '/v2/account/agents', {
-      token: accessToken,
-      body: { agentName: 'coder', sessionName: 'ffl' },
-    });
+    const created = await client.createAgent(accessToken, 'coder', 'ffl');
     expect(created.status).toBe(201);
 
     const { agentId, id: sessionID } = created.body.data.session;
+    const runtimeBody = { runtimeToken: created.body.data.runtimeToken };
+    const leasePath = `/v2/account/sessions/${sessionID}/runtime-lease?include_identity=1`;
+    const original = await client.call('PATCH', leasePath, { token: accessToken, body: runtimeBody });
+    expect(original.status).toBe(200);
+    expect(original.body.data.session.canonical).toBe(`${slug}/coder/ffl`);
+
     const updatedAgent = await client.call('PATCH', `/v2/account/agents/${agentId}`, {
       token: accessToken,
       body: { agentName: 'developer', agentDisplayName: '開發助理' },
@@ -59,6 +62,16 @@ describe('Organization identity lifecycle (real OAuth, Worker and D1)', () => {
     });
     expect(renamedOrg.status).toBe(200);
     expect(renamedOrg.body.data).toMatchObject({ slug, displayName: 'Nuwa R&D' });
+
+    const status = await client.call('GET', '/v2/account/status?include_grant=1', { token: accessToken });
+    expect(status.body.data.organization.displayName).toBe('Nuwa R&D');
+
+    const renewed = await client.call('PATCH', leasePath, { token: accessToken, body: runtimeBody });
+    expect(renewed.status).toBe(200);
+    expect(renewed.body.data.session).toMatchObject({
+      id: sessionID, agentDisplayName: '開發助理', canonical: `${slug}/developer/ffl-dev`,
+      runtime: { expiresAt: renewed.body.data.expiresAt },
+    });
   });
 
   it('switches the default Session before archiving; deactivated addresses and capabilities stop working', async () => {

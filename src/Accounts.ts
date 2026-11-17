@@ -1,4 +1,5 @@
 import { ApplicationError } from './ApplicationError';
+import type { OrganizationRow } from './Organizations';
 
 export type AccountRow = {
   id: string;
@@ -6,6 +7,18 @@ export type AccountRow = {
   orgId: string | null;
   createdAt: string;
   authVersion: number;
+};
+
+type AccountOrganizationRow = AccountRow & {
+  organizationID: string | null;
+  organizationSlug: string;
+  organizationDisplayName: string;
+  organizationCreatedAt: string;
+};
+
+export type AuthenticatedAccount = {
+  account: AccountRow;
+  organization: OrganizationRow | null;
 };
 
 type AccountCredentialRow = AccountRow & {
@@ -155,13 +168,41 @@ export class AccountService {
     return AccountService.publicAccount(row);
   }
 
-  async assertAuthVersion(accountID: string, authVersion: number): Promise<AccountRow> {
-    const account = await this.getAccount(accountID);
-
+  private static requireAuthVersion(account: AccountRow, authVersion: number): void {
     if (account.authVersion !== authVersion) {
       throw new ApplicationError(401, 'authorization_revoked', 'This account must sign in again.');
     }
+  }
+
+  async assertAuthVersion(accountID: string, authVersion: number): Promise<AccountRow> {
+    const account = await this.getAccount(accountID);
+    AccountService.requireAuthVersion(account, authVersion);
 
     return account;
+  }
+
+  async authenticatedAccount(accountID: string, authVersion: number): Promise<AuthenticatedAccount> {
+    const row = await this.db.prepare(
+      `SELECT a.id, a.email, a.org_id AS orgId, a.created_at AS createdAt,
+              a.auth_version AS authVersion, o.id AS organizationID, o.slug AS organizationSlug,
+              o.display_name AS organizationDisplayName, o.created_at AS organizationCreatedAt
+         FROM accounts a LEFT JOIN organizations o ON o.id = a.org_id WHERE a.id = ?`,
+    ).bind(accountID).first<AccountOrganizationRow>();
+
+    if (!row) {
+      throw new ApplicationError(401, 'invalid_account', 'Account no longer exists.');
+    }
+    AccountService.requireAuthVersion(row, authVersion);
+
+    const { organizationID, organizationSlug, organizationDisplayName, organizationCreatedAt,
+      ...account } = row;
+
+    return {
+      account,
+      organization: organizationID === null ? null : {
+        id: organizationID, slug: organizationSlug,
+        displayName: organizationDisplayName, createdAt: organizationCreatedAt,
+      },
+    };
   }
 }
