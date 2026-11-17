@@ -13,6 +13,11 @@ paths:
   /v2/account/status:
     get:
       summary: Show signed-in account and Organization
+      parameters:
+        - name: include_grant
+          in: query
+          schema: { type: string, enum: ['1'] }
+          description: Also return the authenticated OAuth grant fingerprint for internal Relay binding.
       responses:
         '200': { description: Account identity and Organization }
         '401': { description: OAuth authorization required }
@@ -199,6 +204,11 @@ paths:
         '409': { description: Session already held by an active Runtime }
     patch:
       summary: Renew the exclusive Runtime lease
+      parameters:
+        - name: include_identity
+          in: query
+          schema: { type: string, enum: ['1'] }
+          description: Also return the verified Session and Organization in the same renewal response.
       requestBody:
         required: true
         content:
