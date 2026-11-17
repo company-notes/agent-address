@@ -127,6 +127,43 @@ describe('real MCP client authenticates through OAuth and uses the shared API', 
     await session.close();
   });
 
+  it('lets a new Codex connection select an idle existing address without changing identity', async () => {
+    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
+    const api = new TestClient();
+    const slug = TestClient.uniqueName('select');
+    await api.registerOrganization(accessToken, slug);
+
+    const original = await MCPTestSession.connect(accessToken);
+    const replacement = await MCPTestSession.connect(accessToken);
+    const old = await original.call('agentAddressClaimAgent', {
+      agentName: 'codex-win', sessionName: 'ffl',
+    });
+    const fresh = await replacement.call('agentAddressEnsureIdentity');
+
+    const busy = await replacement.call('agentAddressSelectSession', {
+      address: `${slug}/codex-win/ffl`,
+    });
+    expect(busy.isError).toBe(true);
+    expect((await replacement.call('agentAddressGetStatus')).data.session.id)
+      .toBe(fresh.data.session.id);
+
+    await original.call('agentAddressReleaseRuntime');
+
+    const selected = await replacement.call('agentAddressSelectSession', {
+      address: `${slug}/codex-win/ffl`,
+    });
+    expect(selected.isError).toBe(false);
+    expect(selected.data.session.id).toBe(old.data.session.id);
+    expect(selected.data.session.agentId).toBe(old.data.session.agentId);
+    expect(selected.text).not.toMatch(/runtimeToken|resumeToken|runtime_|resume_/);
+
+    const ensured = await replacement.call('agentAddressEnsureIdentity');
+    expect(ensured.data.session.id).toBe(old.data.session.id);
+
+    await replacement.close();
+    await original.close();
+  });
+
   it('recovers when the Portal archives the current Agent during an active MCP connection', async () => {
     const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
     const api = new TestClient();
