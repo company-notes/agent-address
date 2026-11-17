@@ -179,7 +179,7 @@ describe('Organization identity lifecycle (real OAuth, Worker and D1)', () => {
     const sessionID = original.body.data.session.id;
     const endpoint = `/v2/account/sessions/${sessionID}/owner-runtime-lease`;
 
-    const busy = await client.call('PUT', endpoint, { token: owner.accessToken });
+    const busy = await client.call('PUT', endpoint, { token: owner.accessToken, body: {} });
     expect(busy.status).toBe(409);
     expect(busy.body.error.code).toBe('session_in_use');
 
@@ -190,10 +190,10 @@ describe('Organization identity lifecycle (real OAuth, Worker and D1)', () => {
       });
     expect(released.status).toBe(200);
 
-    const foreign = await client.call('PUT', endpoint, { token: outsider.accessToken });
+    const foreign = await client.call('PUT', endpoint, { token: outsider.accessToken, body: {} });
     expect(foreign.status).toBe(404);
 
-    const recovered = await client.call('PUT', endpoint, { token: owner.accessToken });
+    const recovered = await client.call('PUT', endpoint, { token: owner.accessToken, body: {} });
     expect(recovered.status).toBe(200);
     expect(recovered.body.data.session).toMatchObject({
       id: sessionID,
