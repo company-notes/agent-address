@@ -157,6 +157,27 @@ paths:
       summary: Replace an existing Session's private resume capability
       responses:
         '200': { description: New one-time Resume Token; existing Runtime lease remains active }
+  /v2/account/sessions/{sessionID}/owner-runtime-lease:
+    parameters:
+      - $ref: '#/components/parameters/sessionID'
+    put:
+      summary: Restore an idle Session for its authenticated Organization owner
+      description: |
+        Explicitly recovers the same Agent and Session without the old Resume
+        Token, rejecting an active Runtime. Returns a new private Runtime lease
+        and rotated Resume Token for protected client storage.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                runtimeLabel: { type: string }
+      responses:
+        '200': { description: Existing Session, new exclusive Runtime and Resume capabilities }
+        '404': { description: Session not in the authorized Organization }
+        '409': { description: The existing Session has an active Runtime }
   /v2/account/sessions/{sessionID}/runtime-lease:
     parameters:
       - $ref: '#/components/parameters/sessionID'
