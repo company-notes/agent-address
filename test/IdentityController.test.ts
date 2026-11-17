@@ -44,6 +44,43 @@ describe('identity account API boundaries', () => {
     expect(renewed.status).toBe(200);
   });
 
+  it('provides a single authenticated account and Runtime identity round trip for Relay', async () => {
+    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
+    const slug = TestClient.uniqueName('relay');
+    await client.registerOrganization(accessToken, slug);
+
+    const status = await client.call('GET', '/v2/account/status?include_grant=1', {
+      token: accessToken,
+    });
+    const grant = await client.call('GET', '/v2/account/grant', { token: accessToken });
+
+    expect(status.status).toBe(200);
+    expect(status.body.data.organization.slug).toBe(slug);
+    expect(status.body.data.grantFingerprint).toBe(grant.body.data.grantFingerprint);
+
+    const agent = await client.createAgent(accessToken, 'relaybot', 'main');
+    const sessionID = agent.body.data.session.id;
+    const path = `/v2/account/sessions/${sessionID}/runtime-lease?include_identity=1`;
+
+    const lease = await client.call('PATCH', path, {
+      token: accessToken, body: { runtimeToken: agent.body.data.runtimeToken },
+    });
+    expect(lease.status).toBe(200);
+    expect(lease.body.data).toMatchObject({
+      session: { id: sessionID, canonical: `${slug}/relaybot/main` },
+      organization: { id: status.body.data.organization.id, slug },
+    });
+    expect(Date.parse(lease.body.data.expiresAt)).toBeGreaterThan(Date.now());
+
+    await client.call('DELETE', path, {
+      token: accessToken, body: { runtimeToken: agent.body.data.runtimeToken },
+    });
+    const revoked = await client.call('PATCH', path, {
+      token: accessToken, body: { runtimeToken: agent.body.data.runtimeToken },
+    });
+    expect(revoked.status).toBe(409);
+  });
+
   it('supports a named Agent with a default Session and additional Sessions', async () => {
     const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
     const slug = TestClient.uniqueName('team');
