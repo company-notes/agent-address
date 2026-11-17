@@ -223,7 +223,7 @@ Portal 應從組織整體往下呈現：Organization → Agent 清單 → Agent 
 
 - **身份持久化：** D1 保存 Organization、Account、Agent、Session。Canonical Address 使用可變更的 Handle，內部 ID 不隨改名改變。改名後舊地址立即失效，不保留 alias。
 - **Default Session：** Agent 初次建立就有 Default Session；不指定 Session Handle 時使用 `main`。組織管理者可改指定其他 Session；不可直接停用仍是 Default 的 Session。
-- **恢復權限：** 建立／註冊發出只顯示一次的 Resume Token；在同 Organization 的 OAuth 權限及該 Token 皆合法的條件下，才能恢復 Session。組織管理者可輪替遺失的 Token，舊 Token 立即失效。
+- **恢復權限：** 建立／註冊發出只顯示一次的 Resume Token；一般 Resume 仍驗證其合法性。同 Organization 的授權擁有者亦可明確指定已存在、目前沒有有效 Runtime Lease 的 Session，透過 `PUT /v2/account/sessions/{sessionID}/owner-runtime-lease` 直接恢復原身分；此操作重新簽發 Resume Token，舊 Token 隨即失效。這是同組織擁有者的自助恢復，不是同事透過訊息內文冒用其他身分。
 - **Runtime 排他：** D1 單列 Lease、原子取得、續期與釋放；已被其他 Runtime 持有時拒絕接管。Agent／Session 停用會撤銷相應 Lease，失效 Session 無法繼續使用。
 - **管理權與執行權分離：** Organization Portal 登記身分不取得 Runtime Lease；只有 Claim 或合法 Resume 取得使用權。
 - **跨產品邊界：** Conversation Binding（A 與 B 的固定訊息 Session 對應）由訊息傳送層或獨立服務持有。Agent Address 提供身份查詢與解析，不保存訊息或私下建立 Relay 對話。
