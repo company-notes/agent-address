@@ -174,6 +174,16 @@ export class IdentityController {
       return ResponseData.ok(await this.services.identities.rotateResumeToken(accountID, identifier));
     }
 
+    if (resource === 'sessions' && identifier && action === 'owner-runtime-lease' &&
+        segments.length === 5 && method === 'PUT') {
+      const data = await RequestData.readJSON(request);
+      const runtimeLabel = RequestData.optionalString(data, 'runtimeLabel', 120);
+
+      return ResponseData.ok(
+        await this.services.identities.recoverByOwner(accountID, identifier, runtimeLabel),
+      );
+    }
+
     if (resource === 'sessions' && identifier && action === 'runtime-lease' &&
         segments.length === 5 && ['PUT', 'PATCH', 'DELETE'].includes(method)) {
       return this.sessionRuntime(accountID, identifier, request);
