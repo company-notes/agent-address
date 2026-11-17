@@ -169,11 +169,11 @@ export class MCPIdentityLifecycle {
     );
     const saved = await this.saved();
 
-    if (saved?.sessionID === target.id) {
-      return this.existing(saved);
-    }
-
     if (target.runtime) {
+      if (saved?.sessionID === target.id) {
+        return this.existing(saved);
+      }
+
       throw new Error('The selected Session is still in use.');
     }
 
