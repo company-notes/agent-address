@@ -26,8 +26,8 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
     'membership or someone else\'s address. Only change or forget the existing identity on an ' +
     'explicit user request. Show the resulting canonical organization/agent/session address. ' +
     'A second active Runtime cannot be taken over. Runtime and Resume credentials are never ' +
-    'model-visible tool arguments or results. A fresh independent MCP connection gets its own ' +
-    'Agent unless an authorized persisted connection can securely resume its previous one.';
+    'model-visible tool arguments or results. A fresh connection starts with its own Agent, ' +
+    'but an authorized user may explicitly select an idle existing Session by address.';
 
   private pendingEnsure: Promise<IdentitySummary> | null = null;
 
@@ -152,6 +152,21 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
     );
   }
 
+  private registerSelectSession(): void {
+    this.server.registerTool(
+      'agentAddressSelectSession',
+      {
+        description: 'On explicit user request, select an existing Agent/Session address in ' +
+          'this Organization. The Session must be idle. Its private Runtime and Resume ' +
+          'capabilities are recovered server-side, never shown in chat.',
+        inputSchema: { address: z.string().min(1).max(255) },
+      },
+      async ({ address }) => AddressMCP.textResult(
+        await this.identityManager.selectSession(address),
+      ),
+    );
+  }
+
   private registerHeartbeat(): void {
     this.server.registerTool(
       'agentAddressHeartbeatRuntime',
@@ -225,6 +240,7 @@ export class AddressMCP extends McpAgent<Env, unknown, AccountProps> {
     this.registerClaim();
     this.registerCreateSession();
     this.registerResume();
+    this.registerSelectSession();
     this.registerHeartbeat();
     this.registerRelease();
     this.registerForgetLocal();
