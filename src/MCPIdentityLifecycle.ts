@@ -163,6 +163,53 @@ export class MCPIdentityLifecycle {
     return this.claim(agentDisplayName ? { agentDisplayName } : {});
   }
 
+  async selectSession(address: string): Promise<IdentitySummary> {
+    const target = await this.api.call<PublicSession>(
+      'GET', '/v2/account/addresses?address=' + encodeURIComponent(address),
+    );
+    const saved = await this.saved();
+
+    if (saved?.sessionID === target.id) {
+      return this.existing(saved);
+    }
+
+    if (target.runtime) {
+      throw new Error('The selected Session is still in use.');
+    }
+
+    const recovered = await this.api.call<ClaimedIdentity>(
+      'PUT', `/v2/account/sessions/${encodeURIComponent(target.id)}/owner-runtime-lease`,
+      { runtimeLabel: 'agent-address-mcp' },
+    );
+
+    try {
+      if (saved?.runtimeToken) {
+        const previous = await this.api.call<PublicSession>(
+          'GET', `/v2/account/sessions/${encodeURIComponent(saved.sessionID)}`,
+        );
+
+        if (previous.runtime) {
+          await this.api.call(
+            'DELETE', `/v2/account/sessions/${encodeURIComponent(saved.sessionID)}/runtime-lease`,
+            { runtimeToken: saved.runtimeToken },
+          );
+        }
+      }
+
+      await this.remember(target.id, recovered.runtimeToken, recovered.resumeToken);
+    } catch (error) {
+      await this.api.call(
+        'DELETE', `/v2/account/sessions/${encodeURIComponent(target.id)}/runtime-lease`,
+        { runtimeToken: recovered.runtimeToken },
+      );
+      throw error;
+    }
+
+    return MCPIdentityLifecycle.publicIdentity(
+      recovered.session, recovered.leaseExpiresAt, false,
+    );
+  }
+
   async resume(): Promise<IdentitySummary> {
     const saved = await this.saved();
 
