@@ -477,6 +477,33 @@ export class IdentityService {
     };
   }
 
+  /** Recover an idle Session explicitly selected by its Organization owner. */
+  async recoverByOwner(
+    accountID: string, sessionID: string, runtimeLabel: string | null,
+  ): Promise<ClaimedIdentity> {
+    const org = await this.organization(accountID);
+    const session = await this.requireSession(org.id, sessionID);
+    const lease = await this.leases.resume(sessionID, runtimeLabel);
+
+    let resumeToken: string;
+    try {
+      ({ resumeToken } = await this.rotateResumeToken(accountID, sessionID));
+    } catch (error) {
+      await this.leases.release(sessionID, lease.runtimeToken);
+      throw error;
+    }
+
+    return {
+      session: {
+        ...IdentityService.publicSession(org.slug, session),
+        runtime: { label: runtimeLabel, expiresAt: lease.expiresAt },
+      },
+      runtimeToken: lease.runtimeToken,
+      resumeToken,
+      leaseExpiresAt: lease.expiresAt,
+    };
+  }
+
   async renew(accountID: string, sessionID: string, runtimeToken: string): Promise<{ expiresAt: string }> {
     const org = await this.organization(accountID);
     await this.requireSession(org.id, sessionID);
