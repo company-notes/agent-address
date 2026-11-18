@@ -181,6 +181,44 @@ describe('Organization identity lifecycle (real OAuth, Worker and D1)', () => {
     expect(recovered.status).toBe(200);
   });
 
+  it('one request renews the current Runtime or restores an idle Session without stealing ownership', async () => {
+    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
+    await client.registerOrganization(accessToken);
+    const original = await client.createAgent(accessToken, 'recovery', 'main');
+    const { session, runtimeToken, resumeToken } = original.body.data;
+    const path = `/v2/account/sessions/${session.id}/runtime-lease`;
+    const body = { runtimeToken, resumeToken, runtimeLabel: 'recovery-test' };
+
+    const live = await client.call('PUT', path, { token: accessToken, body });
+    expect(live.status).toBe(200);
+    expect(live.body.data).toMatchObject({ renewed: true, runtimeToken, session: { id: session.id } });
+
+    const busy = await client.call('PUT', path, {
+      token: accessToken, body: { ...body, runtimeToken: 'runtime_wrong' },
+    });
+    expect(busy.status).toBe(409);
+    expect(busy.body.error.code).toBe('session_in_use');
+
+    const released = await client.call('DELETE', path, { token: accessToken, body: { runtimeToken } });
+    expect(released.status).toBe(200);
+
+    const invalid = await client.call('PUT', path, {
+      token: accessToken, body: { ...body, resumeToken: 'resume_wrong' },
+    });
+    expect(invalid.status).toBe(403);
+    expect(invalid.body.error.code).toBe('invalid_resume_token');
+
+    const contenders = await Promise.all([
+      client.call('PUT', path, { token: accessToken, body }),
+      client.call('PUT', path, { token: accessToken, body }),
+    ]);
+    expect(contenders.map((result) => result.status).sort()).toEqual([200, 409]);
+    const restored = contenders.find((result) => result.status === 200)!;
+    expect(restored.body.data.session.id).toBe(session.id);
+    expect(restored.body.data.runtimeToken).not.toBe(runtimeToken);
+    expect(restored.body.data.renewed).toBeUndefined();
+  });
+
   it('recovers an idle address for its Organization owner without changing Agent or Session IDs', async () => {
     const owner = await OAuthTestFlow.signUpAndGetToken();
     const outsider = await OAuthTestFlow.signUpAndGetToken();

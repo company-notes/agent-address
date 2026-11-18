@@ -218,9 +218,10 @@ export class IdentityController {
     if (request.method === 'PUT') {
       const resumeToken = RequestData.requiredString(data, 'resumeToken', 256);
       const runtimeLabel = RequestData.optionalString(data, 'runtimeLabel', 120);
+      const runtimeToken = RequestData.optionalString(data, 'runtimeToken', 256) ?? undefined;
 
       return ResponseData.ok(
-        await services.identities.resume(accountID, sessionID, resumeToken, runtimeLabel),
+        await services.identities.resume(accountID, sessionID, resumeToken, runtimeLabel, runtimeToken),
       );
     }
 

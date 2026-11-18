@@ -39,19 +39,24 @@ export class RuntimeLeaseService {
     return { statement, runtimeToken, expiresAt };
   }
 
-  async resume(sessionID: string, runtimeLabel: string | null): Promise<AcquiredLease> {
+  async prepareResume(
+    organizationID: string, sessionID: string, runtimeLabel: string | null,
+    resumeTokenHash: string | null = null,
+  ): Promise<InitialLease> {
     const now = new Date();
     const expiresAt = RuntimeLeaseService.expiration(now);
 
     const runtimeToken = TokenService.randomToken('runtime');
     const tokenHash = await TokenService.sha256Hex(runtimeToken);
 
-    const result = await this.db.prepare(
+    const statement = this.db.prepare(
       `INSERT INTO session_runtime_leases
         (session_id, runtime_token_hash, runtime_label, refreshed_at, expires_at)
         SELECT ?, ?, ?, ?, ?
           FROM sessions s JOIN agents a ON a.id = s.agent_id
-         WHERE s.id = ? AND s.archived_at IS NULL AND a.archived_at IS NULL
+         WHERE s.id = ? AND a.org_id = ?
+           AND s.archived_at IS NULL AND a.archived_at IS NULL
+           AND (? IS NULL OR s.resume_token_hash = ?)
         ON CONFLICT(session_id) DO UPDATE SET
           runtime_token_hash = excluded.runtime_token_hash,
           runtime_label = excluded.runtime_label,
@@ -70,8 +75,15 @@ export class RuntimeLeaseService {
       now.toISOString(),
       expiresAt,
       sessionID,
-    ).run();
+      organizationID,
+      resumeTokenHash,
+      resumeTokenHash,
+    );
 
+    return { statement, runtimeToken, expiresAt };
+  }
+
+  requireResumed(result: D1Result): void {
     if (result.meta.changes !== 1) {
       throw new ApplicationError(
         409,
@@ -79,8 +91,15 @@ export class RuntimeLeaseService {
         'This Session already has an active Runtime. Use a new Agent/Session address instead.',
       );
     }
+  }
 
-    return { runtimeToken, expiresAt };
+  async resume(
+    organizationID: string, sessionID: string, runtimeLabel: string | null,
+  ): Promise<AcquiredLease> {
+    const lease = await this.prepareResume(organizationID, sessionID, runtimeLabel);
+    this.requireResumed(await lease.statement.run());
+
+    return { runtimeToken: lease.runtimeToken, expiresAt: lease.expiresAt };
   }
 
   async prepareRenewal(

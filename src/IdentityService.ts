@@ -78,6 +78,7 @@ export type ResumedIdentity = {
   session: PublicSession;
   runtimeToken: string;
   leaseExpiresAt: string;
+  renewed?: true;
 };
 
 type PreparedIdentity = RegisteredIdentity & {
@@ -464,19 +465,43 @@ export class IdentityService {
     sessionID: string,
     resumeToken: string,
     runtimeLabel: string | null,
+    runtimeToken?: string,
   ): Promise<ResumedIdentity> {
     const org = await this.organization(accountID);
-    const session = await this.requireSession(org.id, sessionID);
     const tokenHash = await TokenService.sha256Hex(resumeToken);
-    const valid = await this.db.prepare(
-      'SELECT id FROM sessions WHERE id = ? AND resume_token_hash = ? AND archived_at IS NULL',
-    ).bind(sessionID, tokenHash).first<{ id: string }>();
+    const lease = await this.leases.prepareResume(org.id, sessionID, runtimeLabel, tokenHash);
+    const renewal = runtimeToken
+      ? await this.leases.prepareRenewal(org.id, sessionID, runtimeToken)
+      : null;
 
-    if (!valid) {
+    // A live matching Runtime wins before idle acquisition; both decisions use
+    // the same transaction, including the current Resume credential and scope.
+    const [read, valid, acquiredOrRenewed, acquired] = await this.db.batch<SessionRow>([
+      this.sessionStatement(org.id, sessionID),
+      this.db.prepare(
+        'SELECT id FROM sessions WHERE id = ? AND resume_token_hash = ? AND archived_at IS NULL',
+      ).bind(sessionID, tokenHash),
+      ...(renewal ? [renewal.statement] : []),
+      lease.statement,
+    ]);
+    const session = IdentityService.requireSessionRow(read.results[0]);
+
+    if (renewal && runtimeToken && acquiredOrRenewed.meta.changes === 1) {
+      return {
+        session: IdentityService.publicSession(org.slug, {
+          ...session, leaseExpiresAt: renewal.expiresAt,
+        }),
+        runtimeToken,
+        leaseExpiresAt: renewal.expiresAt,
+        renewed: true,
+      };
+    }
+
+    if (!valid.results.length) {
       throw new ApplicationError(403, 'invalid_resume_token', 'Resume credential does not match the Session.');
     }
 
-    const lease = await this.leases.resume(sessionID, runtimeLabel);
+    this.leases.requireResumed(acquired ?? acquiredOrRenewed);
 
     return {
       session: IdentityService.publicSession(org.slug, session),
@@ -491,7 +516,7 @@ export class IdentityService {
   ): Promise<ClaimedIdentity> {
     const org = await this.organization(accountID);
     const session = await this.requireSession(org.id, sessionID);
-    const lease = await this.leases.resume(sessionID, runtimeLabel);
+    const lease = await this.leases.resume(org.id, sessionID, runtimeLabel);
 
     let resumeToken: string;
     try {
