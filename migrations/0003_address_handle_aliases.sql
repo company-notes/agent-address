@@ -97,3 +97,44 @@ BEGIN
   INSERT OR IGNORE INTO address_handle_aliases (kind, scope_id, handle, identity_id)
   VALUES ('session', OLD.agent_id, OLD.handle, OLD.id);
 END;
+
+-- Invalidate dependent name/address projections only when identity data changes.
+-- This revision is read in the existing authenticated Organization lookup.
+ALTER TABLE organizations ADD COLUMN identity_revision INTEGER NOT NULL DEFAULT 0;
+
+CREATE TRIGGER organizations_identity_revision
+AFTER UPDATE OF slug ON organizations
+WHEN OLD.slug IS NOT NEW.slug
+BEGIN
+  UPDATE organizations SET identity_revision = identity_revision + 1 WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER agents_identity_revision_insert
+AFTER INSERT ON agents
+BEGIN
+  UPDATE organizations SET identity_revision = identity_revision + 1 WHERE id = NEW.org_id;
+END;
+
+CREATE TRIGGER agents_identity_revision_update
+AFTER UPDATE OF handle, display_name, archived_at ON agents
+WHEN OLD.handle IS NOT NEW.handle OR OLD.display_name IS NOT NEW.display_name
+  OR OLD.archived_at IS NOT NEW.archived_at
+BEGIN
+  UPDATE organizations SET identity_revision = identity_revision + 1 WHERE id = NEW.org_id;
+END;
+
+CREATE TRIGGER sessions_identity_revision_insert
+AFTER INSERT ON sessions
+BEGIN
+  UPDATE organizations SET identity_revision = identity_revision + 1
+    WHERE id = (SELECT org_id FROM agents WHERE id = NEW.agent_id);
+END;
+
+CREATE TRIGGER sessions_identity_revision_update
+AFTER UPDATE OF handle, is_default, archived_at ON sessions
+WHEN OLD.handle IS NOT NEW.handle OR OLD.is_default IS NOT NEW.is_default
+  OR OLD.archived_at IS NOT NEW.archived_at
+BEGIN
+  UPDATE organizations SET identity_revision = identity_revision + 1
+    WHERE id = (SELECT org_id FROM agents WHERE id = NEW.agent_id);
+END;

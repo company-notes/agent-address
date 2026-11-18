@@ -6,6 +6,7 @@ export type OrganizationRow = {
   slug: string;
   displayName: string;
   createdAt: string;
+  identityRevision: number;
 };
 
 export type OrganizationChanges = { slug?: string; displayName?: string };
@@ -18,7 +19,7 @@ export type OrganizationScope = {
 
 export class OrganizationService {
   private static readonly SELECT = `SELECT id, slug, display_name AS displayName,
-    created_at AS createdAt FROM organizations`;
+    created_at AS createdAt, identity_revision AS identityRevision FROM organizations`;
 
   constructor(
     private readonly db: D1Database,
@@ -92,7 +93,7 @@ export class OrganizationService {
       throw error;
     }
 
-    return { id, slug, displayName, createdAt };
+    return { id, slug, displayName, createdAt, identityRevision: 0 };
   }
 
   async ownsAlias(organizationID: string, slug: string): Promise<boolean> {

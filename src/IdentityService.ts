@@ -441,6 +441,27 @@ export class IdentityService {
     return result.results.map((session) => IdentityService.publicSession(org.slug, session));
   }
 
+  async listSelectedSessions(accountID: string, sessionIDs: string[]) {
+    if (sessionIDs.length < 1 || sessionIDs.length > 25 ||
+        new Set(sessionIDs).size !== sessionIDs.length ||
+        sessionIDs.some((id) => !id || id.length > 64)) {
+      throw new ApplicationError(400, 'invalid_session_selection', 'Select 1 to 25 distinct Session IDs.');
+    }
+
+    const org = await this.organization(accountID);
+    const placeholders = sessionIDs.map(() => '?').join(', ');
+    const result = await this.db.prepare(
+      `${IdentityService.SESSION_SELECT}
+        WHERE a.org_id = ? AND s.id IN (${placeholders})
+          AND a.archived_at IS NULL AND s.archived_at IS NULL`,
+    ).bind(org.id, ...sessionIDs).all<SessionRow>();
+
+    return {
+      organization: { id: org.id, slug: org.slug, identityRevision: org.identityRevision },
+      sessions: result.results.map((session) => IdentityService.publicSession(org.slug, session)),
+    };
+  }
+
   async getSession(accountID: string, sessionID: string): Promise<PublicSession> {
     const org = await this.organization(accountID);
     const session = await this.requireSession(org.id, sessionID);
@@ -574,7 +595,7 @@ export class IdentityService {
 
     return {
       expiresAt: lease.expiresAt,
-      organization: { id: org.id, slug: org.slug },
+      organization: { id: org.id, slug: org.slug, identityRevision: org.identityRevision },
       session: IdentityService.publicSession(org.slug, {
         ...session, leaseExpiresAt: lease.expiresAt,
       }),

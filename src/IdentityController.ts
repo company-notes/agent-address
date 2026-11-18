@@ -151,6 +151,12 @@ export class IdentityController {
       }
     }
 
+    if (method === 'GET' && resource === 'sessions' && segments.length === 3) {
+      const sessionIDs = url.searchParams.getAll('session_id');
+
+      return ResponseData.ok(await services.identities.listSelectedSessions(accountID, sessionIDs));
+    }
+
     if (resource === 'sessions' && identifier && segments.length === 4) {
       if (method === 'GET') {
         return ResponseData.ok(await services.identities.getSession(accountID, identifier));

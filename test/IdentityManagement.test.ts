@@ -21,6 +21,11 @@ describe('Organization identity lifecycle (real OAuth, Worker and D1)', () => {
     const original = await client.call('PATCH', leasePath, { token: accessToken, body: runtimeBody });
     expect(original.status).toBe(200);
     expect(original.body.data.session.canonical).toBe(`${slug}/coder/ffl`);
+    const originalRevision = original.body.data.organization.identityRevision;
+    expect(Number.isSafeInteger(originalRevision)).toBe(true);
+
+    const unchanged = await client.call('PATCH', leasePath, { token: accessToken, body: runtimeBody });
+    expect(unchanged.body.data.organization.identityRevision).toBe(originalRevision);
 
     const updatedAgent = await client.call('PATCH', `/v2/account/agents/${agentId}`, {
       token: accessToken,
@@ -92,10 +97,21 @@ describe('Organization identity lifecycle (real OAuth, Worker and D1)', () => {
 
     const renewed = await client.call('PATCH', leasePath, { token: accessToken, body: runtimeBody });
     expect(renewed.status).toBe(200);
+    expect(renewed.body.data.organization.identityRevision).toBeGreaterThan(originalRevision);
     expect(renewed.body.data.session).toMatchObject({
       id: sessionID, agentDisplayName: '開發助理', canonical: `${slug}-team/developer/ffl-dev`,
       runtime: { expiresAt: renewed.body.data.expiresAt },
     });
+
+    const selection = '/v2/account/sessions?session_id=' + sessionID;
+    const snapshot = await client.call('GET', selection, { token: accessToken });
+    expect(snapshot.status).toBe(200);
+    expect(snapshot.body.data.organization).toEqual(renewed.body.data.organization);
+    expect(snapshot.body.data.sessions).toEqual([renewed.body.data.session]);
+
+    const hidden = await client.call('GET', selection, { token: foreign.accessToken });
+    expect(hidden.status).toBe(200);
+    expect(hidden.body.data.sessions).toEqual([]);
   });
 
   it('assigns readable, unique handles to newly named independent and office Agents', async () => {
