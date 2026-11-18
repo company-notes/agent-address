@@ -7,6 +7,19 @@
     "nodejs_compat"
   ],
   "workers_dev": true,
+  "placement": {
+    "mode": "smart"
+  },
+  "observability": {
+    "enabled": true,
+    "traces": {
+      "enabled": true
+    },
+    "logs": {
+      "enabled": false
+    },
+    "redact_query_string": true
+  },
   "durable_objects": {
     "bindings": [
       {
