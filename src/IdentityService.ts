@@ -42,6 +42,12 @@ type SessionRow = {
   leaseExpiresAt: string | null;
 };
 
+// A left-joined selection still returns the authoritative Organization if all Sessions are absent.
+type ScopedSessionRow = {
+  organizationSlug: string;
+  identityRevision: number;
+} & (SessionRow | { id: null });
+
 export type AgentChanges = {
   agentName?: string;
   agentDisplayName?: string | null;
@@ -201,6 +207,22 @@ export class IdentityService {
        WHERE a.org_id = ? AND s.id = ?
          AND a.archived_at IS NULL AND s.archived_at IS NULL`,
     ).bind(orgID, sessionID);
+  }
+
+  private sessionSelectionStatement(orgID: string, sessionIDs: string[]): D1PreparedStatement {
+    const placeholders = sessionIDs.map(() => '?').join(', ');
+
+    // Read the revision, current slug and selected identities in the same SQL snapshot.
+    return this.db.prepare(
+      `SELECT o.slug AS organizationSlug, o.identity_revision AS identityRevision, selected.*
+         FROM organizations o
+         LEFT JOIN (
+           ${IdentityService.SESSION_SELECT}
+           WHERE a.org_id = ? AND s.id IN (${placeholders})
+             AND a.archived_at IS NULL AND s.archived_at IS NULL
+         ) selected ON 1 = 1
+        WHERE o.id = ?`,
+    ).bind(orgID, ...sessionIDs, orgID);
   }
 
   private async requireSession(orgID: string, sessionID: string): Promise<SessionRow> {
@@ -449,16 +471,17 @@ export class IdentityService {
     }
 
     const org = await this.organization(accountID);
-    const placeholders = sessionIDs.map(() => '?').join(', ');
-    const result = await this.db.prepare(
-      `${IdentityService.SESSION_SELECT}
-        WHERE a.org_id = ? AND s.id IN (${placeholders})
-          AND a.archived_at IS NULL AND s.archived_at IS NULL`,
-    ).bind(org.id, ...sessionIDs).all<SessionRow>();
+    const result = await this.sessionSelectionStatement(org.id, sessionIDs).all<ScopedSessionRow>();
+    const scope = result.results[0];
+
+    if (!scope) {
+      throw new ApplicationError(404, 'organization_not_found', 'Organization not found.');
+    }
 
     return {
-      organization: { id: org.id, slug: org.slug, identityRevision: org.identityRevision },
-      sessions: result.results.map((session) => IdentityService.publicSession(org.slug, session)),
+      organization: { id: org.id, slug: scope.organizationSlug, identityRevision: scope.identityRevision },
+      sessions: result.results.flatMap((row) => row.id === null
+        ? [] : [IdentityService.publicSession(row.organizationSlug, row)]),
     };
   }
 
@@ -587,16 +610,23 @@ export class IdentityService {
     const org = await this.organization(accountID);
     const lease = await this.leases.prepareRenewal(org.id, sessionID, runtimeToken);
 
-    const [read, renewed] = await this.db.batch<SessionRow>([
-      this.sessionStatement(org.id, sessionID), lease.statement,
+    const [read, renewed] = await this.db.batch<ScopedSessionRow>([
+      this.sessionSelectionStatement(org.id, [sessionID]), lease.statement,
     ]);
-    const session = IdentityService.requireSessionRow(read.results[0]);
+    const session = read.results[0];
+
+    if (!session || session.id === null) {
+      throw new ApplicationError(404, 'session_not_found', 'Session not found in your Organization.');
+    }
+
     this.leases.requireRenewed(renewed);
 
     return {
       expiresAt: lease.expiresAt,
-      organization: { id: org.id, slug: org.slug, identityRevision: org.identityRevision },
-      session: IdentityService.publicSession(org.slug, {
+      organization: {
+        id: org.id, slug: session.organizationSlug, identityRevision: session.identityRevision,
+      },
+      session: IdentityService.publicSession(session.organizationSlug, {
         ...session, leaseExpiresAt: lease.expiresAt,
       }),
     };

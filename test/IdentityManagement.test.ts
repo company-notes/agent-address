@@ -188,6 +188,11 @@ describe('Organization identity lifecycle (real OAuth, Worker and D1)', () => {
     const disabled = await client.call('GET', `/v2/account/sessions/${mainID}`, { token: accessToken });
     expect(disabled.status).toBe(404);
 
+    const selection = await client.call('GET',
+      '/v2/account/sessions?session_id=' + mainID + '&session_id=' + extraID, { token: accessToken });
+    expect(selection.status).toBe(200);
+    expect(selection.body.data.sessions.map((session: { id: string }) => session.id)).toEqual([extraID]);
+
     const archivedAgent = await client.call('DELETE', `/v2/account/agents/${agentID}`, {
       token: accessToken,
     });

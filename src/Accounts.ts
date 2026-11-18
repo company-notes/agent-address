@@ -14,7 +14,6 @@ type AccountOrganizationRow = AccountRow & {
   organizationSlug: string;
   organizationDisplayName: string;
   organizationCreatedAt: string;
-  organizationIdentityRevision: number;
 };
 
 export type AuthenticatedAccount = {
@@ -186,8 +185,7 @@ export class AccountService {
   async authenticatedAccount(accountID: string, authVersion: number): Promise<AuthenticatedAccount> {
     const row = await this.db.prepare(
       `SELECT ${AccountService.PUBLIC_COLUMNS}, o.id AS organizationID, o.slug AS organizationSlug,
-              o.display_name AS organizationDisplayName, o.created_at AS organizationCreatedAt,
-              o.identity_revision AS organizationIdentityRevision
+              o.display_name AS organizationDisplayName, o.created_at AS organizationCreatedAt
          FROM accounts a LEFT JOIN organizations o ON o.id = a.org_id WHERE a.id = ?`,
     ).bind(accountID).first<AccountOrganizationRow>();
 
@@ -198,14 +196,13 @@ export class AccountService {
     AccountService.requireAuthVersion(row, authVersion);
 
     const { organizationID, organizationSlug, organizationDisplayName, organizationCreatedAt,
-      organizationIdentityRevision, ...account } = row;
+      ...account } = row;
 
     return {
       account,
       organization: organizationID === null ? null : {
         id: organizationID, slug: organizationSlug,
         displayName: organizationDisplayName, createdAt: organizationCreatedAt,
-        identityRevision: organizationIdentityRevision,
       },
     };
   }

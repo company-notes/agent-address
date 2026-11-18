@@ -99,7 +99,7 @@ BEGIN
 END;
 
 -- Invalidate dependent name/address projections only when identity data changes.
--- This revision is read in the existing authenticated Organization lookup.
+-- The existing Session read used for Runtime renewal returns the same SQL snapshot.
 ALTER TABLE organizations ADD COLUMN identity_revision INTEGER NOT NULL DEFAULT 0;
 
 CREATE TRIGGER organizations_identity_revision
