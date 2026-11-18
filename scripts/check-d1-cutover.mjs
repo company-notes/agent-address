@@ -35,6 +35,7 @@ export class D1CutoverGuard {
   ];
 
   static OFFICE_TABLES = ['agent_registration_requests'];
+  static ADDRESS_TABLES = ['address_handle_aliases'];
 
   static SQLITE_QUERY =
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name";
@@ -78,17 +79,21 @@ export class D1CutoverGuard {
     return commands[0].results.map((row) => row.name);
   }
 
-  static assertSafe(tables, requireOfficeMigration = false) {
+  static assertSafe(tables, requireOfficeMigration = false, requireAddressMigration = false) {
     const productTables = tables.filter((name) =>
       name !== 'd1_migrations' && name !== '_cf_METADATA' && name !== '_cf_KV',
     );
+    if (requireAddressMigration && this.ADDRESS_TABLES.some((table) => !productTables.includes(table))) {
+      throw new Error('D1 schema cutover refused: address alias migration is not applied.');
+    }
+
     if (productTables.length === 0) {
       console.log('D1 schema cutover: empty target database; safe for new schema migration.');
 
       return;
     }
 
-    const expected = new Set([...this.CORE_TABLES, ...this.OFFICE_TABLES]);
+    const expected = new Set([...this.CORE_TABLES, ...this.OFFICE_TABLES, ...this.ADDRESS_TABLES]);
     const missing = this.CORE_TABLES.filter((table) => !productTables.includes(table));
     const incompatible = productTables.filter((table) => !expected.has(table));
 
@@ -111,7 +116,8 @@ export class D1CutoverGuard {
     const mode = this.getMode(args);
     const tables = this.readTables(mode, this.getPersistTo(args));
 
-    this.assertSafe(tables, args.includes('--require-office-migration'));
+    this.assertSafe(tables, args.includes('--require-office-migration'),
+      args.includes('--require-address-migration'));
   }
 }
 

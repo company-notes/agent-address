@@ -2,10 +2,9 @@ import { Alert, Button, Card, Divider, Form, Input, List, Popconfirm, Space, Tag
 
 import type { Agent, IdentityRegistration, Organization, Session } from './PortalAPI';
 
-export type OrganizationFields = {
-  slug: string;
-  displayName: string;
-};
+import { OrganizationEditor, type OrganizationFields } from './OrganizationEditor';
+
+export type { OrganizationFields } from './OrganizationEditor';
 
 export type AgentFields = {
   agentName?: string;
@@ -52,7 +51,7 @@ export function OrganizationOverviewCard({
 }: {
   organization: Organization;
   loading: boolean;
-  onUpdate: (displayName: string) => void;
+  onUpdate: (fields: OrganizationFields) => void;
 }) {
   return (
     <Card title={organization.displayName}>
@@ -60,18 +59,7 @@ export function OrganizationOverviewCard({
         Organization: {organization.slug}
       </Typography.Paragraph>
 
-      <Form
-        key={organization.id}
-        layout="inline"
-        initialValues={{ displayName: organization.displayName }}
-        onFinish={(fields: { displayName: string }) => onUpdate(fields.displayName)}
-      >
-        <Form.Item name="displayName" label="Display name" rules={[{ required: true }]}>
-          <Input aria-label="Organization display name" />
-        </Form.Item>
-
-        <Button htmlType="submit" loading={loading}>Save Organization</Button>
-      </Form>
+      <OrganizationEditor organization={organization} loading={loading} onSave={onUpdate} />
     </Card>
   );
 }

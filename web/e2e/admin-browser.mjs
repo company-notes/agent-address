@@ -48,7 +48,7 @@ const account = {
 
 const detail = {
   ...account,
-  organization: { slug: 'e2e-org', displayName: 'E2E Test Organization' },
+  organization: { id: account.orgId, slug: 'e2e-org', displayName: 'E2E Test Organization' },
   agents: [{ id: 'agent-1', handle: 'releasebot', displayName: 'Release Bot', createdAt: account.createdAt }],
   sessions: [
     { id: 'session-1', agentId: 'agent-1', agentHandle: 'releasebot',
@@ -69,6 +69,7 @@ try {
   const pageErrors = [];
   const searchTerms = [];
   const passwordUpdates = [];
+  const organizationUpdates = [];
 
   page.on('pageerror', (error) => { pageErrors.push(error.message); });
   await page.route('**/admin/api/**', async (route) => {
@@ -87,6 +88,21 @@ try {
       await route.fulfill({ ...options, body: JSON.stringify({ ok: true, data: detail }) });
       return;
     }
+    if (request.method() === 'PATCH' && url.pathname === '/admin/api/accounts/' + account.id + '/organization') {
+      const fields = JSON.parse(request.postData() ?? '{}');
+      organizationUpdates.push(fields);
+      account.organizationSlug = fields.slug;
+      detail.organizationSlug = fields.slug;
+      Object.assign(detail.organization, fields);
+
+      for (const session of detail.sessions) {
+        session.canonical = fields.slug + '/' + session.agentHandle + '/' + session.handle;
+      }
+
+      await route.fulfill({ ...options, body: JSON.stringify({ ok: true, data: detail.organization }) });
+      return;
+    }
+
     if (request.method() === 'PUT' && url.pathname === '/admin/api/accounts/' + account.id + '/password') {
       passwordUpdates.push(JSON.parse(request.postData() ?? '{}'));
       await route.fulfill({ ...options, body: JSON.stringify({ ok: true, data: { id: account.id } }) });
@@ -115,6 +131,13 @@ try {
   await page.getByText('e2e-org/releasebot/main').waitFor();
   await page.getByText('e2e-org/releasebot/ffl-dev').waitFor();
   await page.getByText('Agent identities').waitFor();
+
+  await page.getByLabel('Organization handle').fill('e2e-renamed');
+  await page.getByLabel('Organization display name').fill('Renamed Organization');
+  await page.getByRole('button', { name: 'Save Organization' }).click();
+  await page.getByText('Organization updated.').waitFor();
+  await page.getByText('e2e-renamed/releasebot/main').waitFor();
+  assert.deepEqual(organizationUpdates, [{ slug: 'e2e-renamed', displayName: 'Renamed Organization' }]);
 
   await page.locator('input#password').fill('E2e-Password-2026!');
   await page.locator('input#confirmPassword').fill('E2e-Password-2026!');

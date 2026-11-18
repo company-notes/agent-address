@@ -82,8 +82,8 @@ export class PortalAPI {
     return this.request('POST', '/organization', { slug, displayName });
   }
 
-  static updateOrganization(displayName: string): Promise<Organization> {
-    return this.request('PATCH', '/organization', { displayName });
+  static updateOrganization(fields: { slug: string; displayName: string }): Promise<Organization> {
+    return this.request('PATCH', '/organization', fields);
   }
 
   static agents(): Promise<Agent[]> {
