@@ -93,11 +93,12 @@ export class PasswordHasher {
 
 export class AccountService {
   private static readonly EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  private static readonly SELECT = `
-    SELECT id, email, org_id AS orgId, created_at AS createdAt,
-           auth_version AS authVersion, password_hash AS passwordHash,
-           password_salt AS passwordSalt
-      FROM accounts`;
+  private static readonly PUBLIC_COLUMNS =
+    'a.id, a.email, a.org_id AS orgId, a.created_at AS createdAt, a.auth_version AS authVersion';
+  private static readonly CREDENTIAL_SELECT = `
+    SELECT ${AccountService.PUBLIC_COLUMNS}, a.password_hash AS passwordHash,
+           a.password_salt AS passwordSalt
+      FROM accounts a`;
 
   constructor(
     private readonly db: D1Database,
@@ -108,6 +109,12 @@ export class AccountService {
     const { passwordHash, passwordSalt, ...account } = row;
 
     return account;
+  }
+
+  private static requireAuthVersion(account: AccountRow, authVersion: number): void {
+    if (account.authVersion !== authVersion) {
+      throw new ApplicationError(401, 'authorization_revoked', 'This account must sign in again.');
+    }
   }
 
   async signUp(email: string, password: string, registrationKey: string | null): Promise<AccountRow> {
@@ -143,7 +150,7 @@ export class AccountService {
 
   async logIn(email: string, password: string): Promise<AccountRow> {
     const row = await this.db.prepare(
-      `${AccountService.SELECT} WHERE email = ? COLLATE NOCASE`,
+      `${AccountService.CREDENTIAL_SELECT} WHERE a.email = ? COLLATE NOCASE`,
     ).bind(email.trim()).first<AccountCredentialRow>();
 
     const salt = row?.passwordSalt ?? PasswordHasher.createSalt();
@@ -158,20 +165,14 @@ export class AccountService {
 
   async getAccount(id: string): Promise<AccountRow> {
     const row = await this.db.prepare(
-      `${AccountService.SELECT} WHERE id = ?`,
-    ).bind(id).first<AccountCredentialRow>();
+      `SELECT ${AccountService.PUBLIC_COLUMNS} FROM accounts a WHERE a.id = ?`,
+    ).bind(id).first<AccountRow>();
 
     if (!row) {
       throw new ApplicationError(401, 'invalid_account', 'Account no longer exists.');
     }
 
-    return AccountService.publicAccount(row);
-  }
-
-  private static requireAuthVersion(account: AccountRow, authVersion: number): void {
-    if (account.authVersion !== authVersion) {
-      throw new ApplicationError(401, 'authorization_revoked', 'This account must sign in again.');
-    }
+    return row;
   }
 
   async assertAuthVersion(accountID: string, authVersion: number): Promise<AccountRow> {
@@ -183,8 +184,7 @@ export class AccountService {
 
   async authenticatedAccount(accountID: string, authVersion: number): Promise<AuthenticatedAccount> {
     const row = await this.db.prepare(
-      `SELECT a.id, a.email, a.org_id AS orgId, a.created_at AS createdAt,
-              a.auth_version AS authVersion, o.id AS organizationID, o.slug AS organizationSlug,
+      `SELECT ${AccountService.PUBLIC_COLUMNS}, o.id AS organizationID, o.slug AS organizationSlug,
               o.display_name AS organizationDisplayName, o.created_at AS organizationCreatedAt
          FROM accounts a LEFT JOIN organizations o ON o.id = a.org_id WHERE a.id = ?`,
     ).bind(accountID).first<AccountOrganizationRow>();
@@ -192,6 +192,7 @@ export class AccountService {
     if (!row) {
       throw new ApplicationError(401, 'invalid_account', 'Account no longer exists.');
     }
+
     AccountService.requireAuthVersion(row, authVersion);
 
     const { organizationID, organizationSlug, organizationDisplayName, organizationCreatedAt,

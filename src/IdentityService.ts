@@ -163,20 +163,20 @@ export class IdentityService {
     return agent;
   }
 
-  private sessionStatement(orgID: string, sessionID: string): D1PreparedStatement {
-    return this.db.prepare(
-      `${IdentityService.SESSION_SELECT}
-       WHERE a.org_id = ? AND s.id = ?
-         AND a.archived_at IS NULL AND s.archived_at IS NULL`,
-    ).bind(orgID, sessionID);
-  }
-
   private static requireSessionRow(session: SessionRow | null | undefined): SessionRow {
     if (!session) {
       throw new ApplicationError(404, 'session_not_found', 'Session not found in your Organization.');
     }
 
     return session;
+  }
+
+  private sessionStatement(orgID: string, sessionID: string): D1PreparedStatement {
+    return this.db.prepare(
+      `${IdentityService.SESSION_SELECT}
+       WHERE a.org_id = ? AND s.id = ?
+         AND a.archived_at IS NULL AND s.archived_at IS NULL`,
+    ).bind(orgID, sessionID);
   }
 
   private async requireSession(orgID: string, sessionID: string): Promise<SessionRow> {
