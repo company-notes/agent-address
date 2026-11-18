@@ -26,6 +26,7 @@ export type AgentRow = {
   createdAt: string;
   defaultSessionID: string | null;
   defaultSessionHandle: string | null;
+  registrationID: string | null;
 };
 
 type SessionRow = {
@@ -89,10 +90,12 @@ export class IdentityService {
   private static readonly AGENT_SELECT = `
     SELECT a.id, a.org_id AS orgId, a.handle, a.display_name AS displayName,
            a.created_at AS createdAt,
-           s.id AS defaultSessionID, s.handle AS defaultSessionHandle
+           s.id AS defaultSessionID, s.handle AS defaultSessionHandle,
+           r.registration_id AS registrationID
       FROM agents a
       LEFT JOIN sessions s ON s.agent_id = a.id
            AND s.is_default = 1 AND s.archived_at IS NULL
+      LEFT JOIN agent_registration_requests r ON r.org_id = a.org_id AND r.agent_id = a.id
   `;
 
   private static readonly SESSION_SELECT = `
