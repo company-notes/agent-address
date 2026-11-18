@@ -83,6 +83,7 @@ export class D1CutoverGuard {
     const productTables = tables.filter((name) =>
       name !== 'd1_migrations' && name !== '_cf_METADATA' && name !== '_cf_KV',
     );
+
     if (requireAddressMigration && this.ADDRESS_TABLES.some((table) => !productTables.includes(table))) {
       throw new Error('D1 schema cutover refused: address alias migration is not applied.');
     }

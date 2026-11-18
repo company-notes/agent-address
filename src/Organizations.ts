@@ -94,6 +94,7 @@ export class OrganizationService {
 
     return { id, slug, displayName, createdAt };
   }
+
   async ownsAlias(organizationID: string, slug: string): Promise<boolean> {
     const alias = await this.db.prepare(
       `SELECT identity_id FROM address_handle_aliases

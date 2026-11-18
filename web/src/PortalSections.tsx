@@ -1,7 +1,6 @@
 import { Alert, Button, Card, Divider, Form, Input, List, Popconfirm, Space, Tag, Typography } from 'antd';
 
 import type { Agent, IdentityRegistration, Organization, Session } from './PortalAPI';
-
 import { OrganizationEditor, type OrganizationFields } from './OrganizationEditor';
 
 export type { OrganizationFields } from './OrganizationEditor';

@@ -464,7 +464,6 @@ export class IdentityService {
 
     const statement = this.db.prepare(
       `${IdentityService.SESSION_SELECT}
-
        WHERE a.org_id = ? AND (a.handle = ? COLLATE NOCASE OR
          a.id = (SELECT identity_id FROM address_handle_aliases
           WHERE kind = 'agent' AND scope_id = a.org_id AND handle = ?))
