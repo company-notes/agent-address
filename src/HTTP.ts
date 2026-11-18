@@ -35,6 +35,17 @@ export class RequestData {
     return data as JSONRecord;
   }
 
+  static organizationChanges(data: JSONRecord): { slug?: string; displayName?: string } {
+    if (!('slug' in data) && !('displayName' in data)) {
+      throw new ApplicationError(400, 'invalid_request', 'Provide a slug or display name.');
+    }
+
+    return {
+      ...('slug' in data ? { slug: this.requiredString(data, 'slug', 63) } : {}),
+      ...('displayName' in data ? { displayName: this.requiredString(data, 'displayName', 120) } : {}),
+    };
+  }
+
   static requiredString(data: JSONRecord, key: string, maxLength = 128): string {
     const value = data[key];
     if (typeof value !== 'string' || !value.trim()) {

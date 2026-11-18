@@ -33,6 +33,14 @@ export class IdentityNames {
     return handle;
   }
 
+  static suggestedAgentHandle(displayName: string | undefined): string | null {
+    const personal = (displayName ?? '').normalize('NFKC').split(/[|·]/u, 1)[0].trim();
+    const alternate = personal.match(/\(([a-zA-Z][a-zA-Z0-9_-]*)[^()]*\)/u);
+    const candidate = alternate?.[1] ?? personal.match(/^[a-zA-Z][a-zA-Z0-9_-]*/u)?.[0];
+
+    return candidate ? candidate.toLowerCase().slice(0, 63).replace(/[-_]+$/, '') : null;
+  }
+
   static path(value: string): string {
     const raw = value.trim().replace(/^\/+|\/+$/g, '');
 
