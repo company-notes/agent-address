@@ -1,4 +1,5 @@
 import { AccountAuthenticator } from './AccountAuthenticator';
+import { AccountService } from './Accounts';
 import { Env } from './Env';
 import { ApplicationError } from './ApplicationError';
 import { JSONRecord, RequestData, ResponseData } from './HTTP';
@@ -7,10 +8,10 @@ import { Services } from './Services';
 
 // The only account-facing HTTP API. MCP calls handleAuthenticated with its OAuth identity.
 export class IdentityController {
-  private readonly services: Services;
+  private readonly accounts: AccountService;
 
   constructor(private readonly env: Env) {
-    this.services = new Services(env);
+    this.accounts = new AccountService(env.DB, env.REGISTRATION_KEY);
   }
 
   async handle(request: Request): Promise<Response> {
@@ -18,16 +19,20 @@ export class IdentityController {
 
     if (new URL(request.url).pathname === '/v2/account/grant' &&
         request.method === 'GET') {
-      await this.services.accounts.assertAuthVersion(identity.accountId, identity.authVersion ?? 0);
+      await this.accounts.assertAuthVersion(identity.accountId, identity.authVersion ?? 0);
 
       return ResponseData.ok({ grantFingerprint: identity.grantFingerprint });
     }
 
-    return this.handleAuthenticated(identity.accountId, request, identity.authVersion);
+    return this.handleAuthenticated(identity.accountId, request, identity.authVersion,
+      identity.grantFingerprint);
   }
 
-  async handleAuthenticated(accountID: string, request: Request, authVersion = 0): Promise<Response> {
-    await this.services.accounts.assertAuthVersion(accountID, authVersion);
+  async handleAuthenticated(
+    accountID: string, request: Request, authVersion = 0, grantFingerprint?: string,
+  ): Promise<Response> {
+    const { account, organization } = await this.accounts.authenticatedAccount(accountID, authVersion);
+    const services = new Services(this.env, { accountID, organization });
 
     const url = new URL(request.url);
     const segments = url.pathname.split('/').filter(Boolean);
@@ -39,14 +44,15 @@ export class IdentityController {
     }
 
     if (method === 'GET' && resource === 'status' && segments.length === 3) {
-      const account = await this.services.accounts.getAccount(accountID);
-      const organization = account.orgId
-        ? await this.services.organizations.getForAccount(accountID)
-        : null;
+      if (account.orgId && !organization) {
+        throw new ApplicationError(404, 'organization_not_found', 'Organization not found.');
+      }
 
       return ResponseData.ok({
         account: { email: account.email },
         organization,
+        ...(url.searchParams.get('include_grant') === '1' && grantFingerprint
+          ? { grantFingerprint } : {}),
       });
     }
 
@@ -55,14 +61,14 @@ export class IdentityController {
       const slug = RequestData.requiredString(data, 'slug', 63);
       const displayName = RequestData.requiredString(data, 'displayName', 120);
 
-      return ResponseData.ok(await this.services.organizations.register(accountID, slug, displayName), 201);
+      return ResponseData.ok(await services.organizations.register(accountID, slug, displayName), 201);
     }
 
     if (method === 'PATCH' && resource === 'organization' && segments.length === 3) {
       const data = await RequestData.readJSON(request);
       const displayName = RequestData.requiredString(data, 'displayName', 120);
 
-      return ResponseData.ok(await this.services.organizations.updateDisplayName(accountID, displayName));
+      return ResponseData.ok(await services.organizations.updateDisplayName(accountID, displayName));
     }
 
     if (method === 'POST' && resource === 'agent-runtime-leases' &&
@@ -70,7 +76,7 @@ export class IdentityController {
       const data = await RequestData.readJSON(request);
 
       return ResponseData.ok(
-        await this.services.identities.claimAgent(accountID, IdentityController.newAgentInput(data)),
+        await services.identities.claimAgent(accountID, IdentityController.newAgentInput(data)),
         201,
       );
     }
@@ -80,7 +86,7 @@ export class IdentityController {
       const data = await RequestData.readJSON(request);
 
       return ResponseData.ok(
-        await this.services.identities.claimSession(
+        await services.identities.claimSession(
           accountID,
           identifier,
           IdentityController.newSessionInput(data),
@@ -104,20 +110,20 @@ export class IdentityController {
       };
 
       return ResponseData.ok(
-        await this.services.identities.registerOfficeAgent(accountID, identifier, input),
+        await services.identities.registerOfficeAgent(accountID, identifier, input),
       );
     }
 
     if (resource === 'agents' && segments.length === 3) {
       if (method === 'GET') {
-        return ResponseData.ok(await this.services.identities.listAgents(accountID));
+        return ResponseData.ok(await services.identities.listAgents(accountID));
       }
 
       if (method === 'POST') {
         const data = await RequestData.readJSON(request);
         const input = IdentityController.newAgentInput(data);
 
-        return ResponseData.ok(await this.services.identities.registerAgent(accountID, input), 201);
+        return ResponseData.ok(await services.identities.registerAgent(accountID, input), 201);
       }
     }
 
@@ -126,57 +132,67 @@ export class IdentityController {
         const data = await RequestData.readJSON(request);
         const changes = IdentityController.agentChanges(data);
 
-        return ResponseData.ok(await this.services.identities.updateAgent(accountID, identifier, changes));
+        return ResponseData.ok(await services.identities.updateAgent(accountID, identifier, changes));
       }
 
       if (method === 'DELETE') {
-        return ResponseData.ok(await this.services.identities.archiveAgent(accountID, identifier));
+        return ResponseData.ok(await services.identities.archiveAgent(accountID, identifier));
       }
     }
 
     if (resource === 'agents' && identifier && action === 'sessions' && segments.length === 5) {
       if (method === 'GET') {
-        return ResponseData.ok(await this.services.identities.listSessions(accountID, identifier));
+        return ResponseData.ok(await services.identities.listSessions(accountID, identifier));
       }
 
       if (method === 'POST') {
         const data = await RequestData.readJSON(request);
         const input = IdentityController.newSessionInput(data);
 
-        return ResponseData.ok(await this.services.identities.registerSession(accountID, identifier, input), 201);
+        return ResponseData.ok(await services.identities.registerSession(accountID, identifier, input), 201);
       }
     }
 
     if (resource === 'sessions' && identifier && segments.length === 4) {
       if (method === 'GET') {
-        return ResponseData.ok(await this.services.identities.getSession(accountID, identifier));
+        return ResponseData.ok(await services.identities.getSession(accountID, identifier));
       }
 
       if (method === 'PATCH') {
         const data = await RequestData.readJSON(request);
         const changes = IdentityController.sessionChanges(data);
 
-        return ResponseData.ok(await this.services.identities.updateSession(accountID, identifier, changes));
+        return ResponseData.ok(await services.identities.updateSession(accountID, identifier, changes));
       }
 
       if (method === 'DELETE') {
-        return ResponseData.ok(await this.services.identities.archiveSession(accountID, identifier));
+        return ResponseData.ok(await services.identities.archiveSession(accountID, identifier));
       }
     }
 
     if (resource === 'sessions' && identifier && segments.length === 5 &&
         method === 'PUT' && action === 'default-selection') {
-      return ResponseData.ok(await this.services.identities.setDefaultSession(accountID, identifier));
+      return ResponseData.ok(await services.identities.setDefaultSession(accountID, identifier));
     }
 
     if (resource === 'sessions' && identifier && segments.length === 5 &&
         method === 'PUT' && action === 'resume-credential') {
-      return ResponseData.ok(await this.services.identities.rotateResumeToken(accountID, identifier));
+      return ResponseData.ok(await services.identities.rotateResumeToken(accountID, identifier));
+    }
+
+    if (resource === 'sessions' && identifier && action === 'owner-runtime-lease' &&
+        segments.length === 5 && method === 'PUT') {
+      const data = await RequestData.readJSON(request);
+      const runtimeLabel = RequestData.optionalString(data, 'runtimeLabel', 120);
+
+      return ResponseData.ok(
+        await services.identities.recoverByOwner(accountID, identifier, runtimeLabel),
+      );
     }
 
     if (resource === 'sessions' && identifier && action === 'runtime-lease' &&
         segments.length === 5 && ['PUT', 'PATCH', 'DELETE'].includes(method)) {
-      return this.sessionRuntime(accountID, identifier, request);
+      return this.sessionRuntime(services, accountID, identifier, request);
     }
 
     if (method === 'GET' && resource === 'addresses' && segments.length === 3) {
@@ -185,13 +201,14 @@ export class IdentityController {
         throw new ApplicationError(400, 'invalid_address', 'address query parameter is required.');
       }
 
-      return ResponseData.ok(await this.services.identities.resolve(accountID, address));
+      return ResponseData.ok(await services.identities.resolve(accountID, address));
     }
 
     throw new ApplicationError(404, 'not_found', 'Identity API endpoint not found.');
   }
 
   private async sessionRuntime(
+    services: Services,
     accountID: string,
     sessionID: string,
     request: Request,
@@ -201,20 +218,24 @@ export class IdentityController {
     if (request.method === 'PUT') {
       const resumeToken = RequestData.requiredString(data, 'resumeToken', 256);
       const runtimeLabel = RequestData.optionalString(data, 'runtimeLabel', 120);
+      const runtimeToken = RequestData.optionalString(data, 'runtimeToken', 256) ?? undefined;
 
       return ResponseData.ok(
-        await this.services.identities.resume(accountID, sessionID, resumeToken, runtimeLabel),
+        await services.identities.resume(accountID, sessionID, resumeToken, runtimeLabel, runtimeToken),
       );
     }
 
     const runtimeToken = RequestData.requiredString(data, 'runtimeToken', 256);
 
     if (request.method === 'PATCH') {
-      return ResponseData.ok(await this.services.identities.renew(accountID, sessionID, runtimeToken));
+      const lease = await services.identities.renewWithIdentity(accountID, sessionID, runtimeToken);
+
+      return ResponseData.ok(new URL(request.url).searchParams.get('include_identity') === '1'
+        ? lease : { expiresAt: lease.expiresAt });
     }
 
     if (request.method === 'DELETE') {
-      return ResponseData.ok(await this.services.identities.release(accountID, sessionID, runtimeToken));
+      return ResponseData.ok(await services.identities.release(accountID, sessionID, runtimeToken));
     }
 
     throw new ApplicationError(404, 'not_found', 'Identity API endpoint not found.');

@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 // Real Chromium -> real local Worker -> OAuth -> D1, with no API mocks or production access.
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+import { WranglerD1Runner } from '../../scripts/check-d1-cutover.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const origin = 'http://127.0.0.1:8789';
@@ -46,10 +47,12 @@ class TestProcess {
 
 const configure = async () => {
   await TestProcess.run(process.execPath, ['scripts/prepare-deploy.mjs']);
-  await TestProcess.run('npx', [
-    'wrangler', 'd1', 'migrations', 'apply', 'DB',
+  const migration = WranglerD1Runner.invocation([
+    'd1', 'migrations', 'apply', 'DB',
     '--local', '--config', '.wrangler.deploy.jsonc',
   ]);
+
+  await TestProcess.run(migration.executable, migration.arguments);
 };
 
 let worker;
@@ -57,24 +60,31 @@ let browser;
 try {
   await configure();
 
-  worker = spawn('npx', [
-    'wrangler', 'dev',
-    '--local', '--ip', '127.0.0.1', '--port', '8789',
+  const server = WranglerD1Runner.invocation([
+    'dev', '--local', '--ip', '127.0.0.1', '--port', '8789',
     '--config', '.wrangler.deploy.jsonc',
     '--var', 'REGISTRATION_KEY:' + registrationKey,
-  ], {
+  ]);
+
+  worker = spawn(server.executable, server.arguments, {
     cwd: root,
     env: environment,
-    detached: true,
+    detached: process.platform !== 'win32',
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
   let output = '';
+  let startupError;
   worker.stdout.on('data', (data) => { output += data.toString(); });
   worker.stderr.on('data', (data) => { output += data.toString(); });
+  worker.once('error', (error) => { startupError = error; });
 
   for (let attempt = 0; attempt < 120; attempt += 1) {
-    if (worker.exitCode !== null) {
+    if (startupError) {
+      throw new Error('Local Worker could not be launched:\n' + output, { cause: startupError });
+    }
+
+    if (worker.exitCode !== null || worker.signalCode !== null) {
       throw new Error('Local Worker stopped unexpectedly:\n' + output);
     }
 
@@ -178,14 +188,27 @@ try {
   assert.deepEqual(pageErrors, [], 'Browser must have no uncaught script errors');
   console.log('PASS: real Chromium + Worker + OAuth + D1 — Portal signup, create, rename, default, rotate and archive');
 } finally {
-  if (browser) {
-    await browser.close();
-  }
-
-  if (worker?.pid) {
-    // Wrangler starts workerd as a child. Stop the whole isolated CI process group.
-    process.kill(-worker.pid, 'SIGTERM');
-    worker.stdout.destroy();
-    worker.stderr.destroy();
+  try {
+    if (browser) {
+      await browser.close();
+    }
+  } finally {
+    if (worker) {
+      try {
+        if (worker.pid && worker.exitCode === null && worker.signalCode === null) {
+          // Wrangler starts workerd as a child. Stop the entire local process tree.
+          if (process.platform === 'win32') {
+            execFileSync('taskkill.exe', ['/PID', String(worker.pid), '/T', '/F'], {
+              stdio: 'pipe',
+            });
+          } else {
+            process.kill(-worker.pid, 'SIGTERM');
+          }
+        }
+      } finally {
+        worker.stdout.destroy();
+        worker.stderr.destroy();
+      }
+    }
   }
 }

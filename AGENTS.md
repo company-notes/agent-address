@@ -9,3 +9,5 @@ Current identity is Organization → Agent → Session. Canonical addresses alwa
 For bugs, test the real user scenario red before fixing it, then green. Prefer the actual OAuth Worker, D1, MCP client and Chrome browser to internal API mocks. Maintain true cross-Organization isolation and one active Runtime per Session.
 
 The clean schema targets a **new D1 database**. Never deploy to production, merge the Draft PR, delete the old database, or apply the new baseline to the legacy database without explicit approval.
+
+Production releases are built only from verified, merged `main`. If GitHub Actions is temporarily unavailable, run the same tests locally before the authorized merge, then deploy the verified `main` commit. Never deploy a Draft PR head.

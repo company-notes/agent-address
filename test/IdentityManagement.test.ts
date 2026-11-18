@@ -12,13 +12,16 @@ describe('Organization identity lifecycle (real OAuth, Worker and D1)', () => {
     const slug = TestClient.uniqueName('rename');
     await client.registerOrganization(accessToken, slug);
 
-    const created = await client.call('POST', '/v2/account/agents', {
-      token: accessToken,
-      body: { agentName: 'coder', sessionName: 'ffl' },
-    });
+    const created = await client.createAgent(accessToken, 'coder', 'ffl');
     expect(created.status).toBe(201);
 
     const { agentId, id: sessionID } = created.body.data.session;
+    const runtimeBody = { runtimeToken: created.body.data.runtimeToken };
+    const leasePath = `/v2/account/sessions/${sessionID}/runtime-lease?include_identity=1`;
+    const original = await client.call('PATCH', leasePath, { token: accessToken, body: runtimeBody });
+    expect(original.status).toBe(200);
+    expect(original.body.data.session.canonical).toBe(`${slug}/coder/ffl`);
+
     const updatedAgent = await client.call('PATCH', `/v2/account/agents/${agentId}`, {
       token: accessToken,
       body: { agentName: 'developer', agentDisplayName: '開發助理' },
@@ -59,6 +62,16 @@ describe('Organization identity lifecycle (real OAuth, Worker and D1)', () => {
     });
     expect(renamedOrg.status).toBe(200);
     expect(renamedOrg.body.data).toMatchObject({ slug, displayName: 'Nuwa R&D' });
+
+    const status = await client.call('GET', '/v2/account/status?include_grant=1', { token: accessToken });
+    expect(status.body.data.organization.displayName).toBe('Nuwa R&D');
+
+    const renewed = await client.call('PATCH', leasePath, { token: accessToken, body: runtimeBody });
+    expect(renewed.status).toBe(200);
+    expect(renewed.body.data.session).toMatchObject({
+      id: sessionID, agentDisplayName: '開發助理', canonical: `${slug}/developer/ffl-dev`,
+      runtime: { expiresAt: renewed.body.data.expiresAt },
+    });
   });
 
   it('switches the default Session before archiving; deactivated addresses and capabilities stop working', async () => {
@@ -166,6 +179,93 @@ describe('Organization identity lifecycle (real OAuth, Worker and D1)', () => {
       body: { resumeToken: rotated.body.data.resumeToken },
     });
     expect(recovered.status).toBe(200);
+  });
+
+  it('one request renews the current Runtime or restores an idle Session without stealing ownership', async () => {
+    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
+    await client.registerOrganization(accessToken, TestClient.uniqueName('recovery'));
+    const original = await client.createAgent(accessToken, 'recovery', 'main');
+    expect(original.status).toBe(201);
+    const { session, runtimeToken, resumeToken } = original.body.data;
+    const path = `/v2/account/sessions/${session.id}/runtime-lease`;
+    const body = { runtimeToken, resumeToken, runtimeLabel: 'recovery-test' };
+
+    const live = await client.call('PUT', path, { token: accessToken, body });
+    expect(live.status).toBe(200);
+    expect(live.body.data).toMatchObject({ renewed: true, runtimeToken, session: { id: session.id } });
+
+    const busy = await client.call('PUT', path, {
+      token: accessToken, body: { ...body, runtimeToken: 'runtime_wrong' },
+    });
+    expect(busy.status).toBe(409);
+    expect(busy.body.error.code).toBe('session_in_use');
+
+    const released = await client.call('DELETE', path, { token: accessToken, body: { runtimeToken } });
+    expect(released.status).toBe(200);
+
+    const invalid = await client.call('PUT', path, {
+      token: accessToken, body: { ...body, resumeToken: 'resume_wrong' },
+    });
+    expect(invalid.status).toBe(403);
+    expect(invalid.body.error.code).toBe('invalid_resume_token');
+
+    const contenders = await Promise.all([
+      client.call('PUT', path, { token: accessToken, body }),
+      client.call('PUT', path, { token: accessToken, body }),
+    ]);
+    expect(contenders.map((result) => result.status).sort()).toEqual([200, 409]);
+    const restored = contenders.find((result) => result.status === 200)!;
+    expect(restored.body.data.session.id).toBe(session.id);
+    expect(restored.body.data.runtimeToken).not.toBe(runtimeToken);
+    expect(restored.body.data.renewed).toBeUndefined();
+  });
+
+  it('recovers an idle address for its Organization owner without changing Agent or Session IDs', async () => {
+    const owner = await OAuthTestFlow.signUpAndGetToken();
+    const outsider = await OAuthTestFlow.signUpAndGetToken();
+    const slug = TestClient.uniqueName('recovery');
+    await client.registerOrganization(owner.accessToken, slug);
+    await client.registerOrganization(outsider.accessToken, TestClient.uniqueName('other'));
+
+    const original = await client.createAgent(owner.accessToken, 'gateway', 'main');
+    const sessionID = original.body.data.session.id;
+    const endpoint = `/v2/account/sessions/${sessionID}/owner-runtime-lease`;
+
+    const busy = await client.call('PUT', endpoint, { token: owner.accessToken, body: {} });
+    expect(busy.status).toBe(409);
+    expect(busy.body.error.code).toBe('session_in_use');
+
+    const released = await client.call('DELETE',
+      `/v2/account/sessions/${sessionID}/runtime-lease`, {
+        token: owner.accessToken,
+        body: { runtimeToken: original.body.data.runtimeToken },
+      });
+    expect(released.status).toBe(200);
+
+    const foreign = await client.call('PUT', endpoint, { token: outsider.accessToken, body: {} });
+    expect(foreign.status).toBe(404);
+
+    const recovered = await client.call('PUT', endpoint, { token: owner.accessToken, body: {} });
+    expect(recovered.status).toBe(200);
+    expect(recovered.body.data.session).toMatchObject({
+      id: sessionID,
+      agentId: original.body.data.session.agentId,
+      canonical: `${slug}/gateway/main`,
+    });
+    expect(recovered.body.data.resumeToken).not.toBe(original.body.data.resumeToken);
+
+    const oldCapability = await client.call('PUT',
+      `/v2/account/sessions/${sessionID}/runtime-lease`, {
+        token: owner.accessToken,
+        body: { resumeToken: original.body.data.resumeToken },
+      });
+    expect(oldCapability.status).toBe(403);
+    expect(oldCapability.body.error.code).toBe('invalid_resume_token');
+
+    const agents = await client.call('GET', '/v2/account/agents', {
+      token: owner.accessToken,
+    });
+    expect(agents.body.data).toHaveLength(1);
   });
 
   it('blocks another Organization from modifying, archiving, or rotating an Agent Session', async () => {

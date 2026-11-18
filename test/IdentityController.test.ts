@@ -12,6 +12,13 @@ describe('identity account API boundaries', () => {
     expect(anonymous.status).toBe(401);
 
     const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
+    const status = await client.call('GET', '/v2/account/status?include_grant=1', {
+      token: accessToken,
+    });
+    expect(status.status).toBe(200);
+    expect(status.body.data.organization).toBeNull();
+    expect(status.body.data.grantFingerprint).toBeTruthy();
+
     const unlinked = await client.createAgent(accessToken, 'releasebot', 'main');
     expect(unlinked.status).toBe(409);
     expect(unlinked.body.error.code).toBe('no_organization');
@@ -42,6 +49,43 @@ describe('identity account API boundaries', () => {
       body: { runtimeToken: agent.body.data.runtimeToken },
     });
     expect(renewed.status).toBe(200);
+  });
+
+  it('provides a single authenticated account and Runtime identity round trip for Relay', async () => {
+    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
+    const slug = TestClient.uniqueName('relay');
+    await client.registerOrganization(accessToken, slug);
+
+    const status = await client.call('GET', '/v2/account/status?include_grant=1', {
+      token: accessToken,
+    });
+    const grant = await client.call('GET', '/v2/account/grant', { token: accessToken });
+
+    expect(status.status).toBe(200);
+    expect(status.body.data.organization.slug).toBe(slug);
+    expect(status.body.data.grantFingerprint).toBe(grant.body.data.grantFingerprint);
+
+    const agent = await client.createAgent(accessToken, 'relaybot', 'main');
+    const sessionID = agent.body.data.session.id;
+    const path = `/v2/account/sessions/${sessionID}/runtime-lease?include_identity=1`;
+
+    const lease = await client.call('PATCH', path, {
+      token: accessToken, body: { runtimeToken: agent.body.data.runtimeToken },
+    });
+    expect(lease.status).toBe(200);
+    expect(lease.body.data).toMatchObject({
+      session: { id: sessionID, canonical: `${slug}/relaybot/main` },
+      organization: { id: status.body.data.organization.id, slug },
+    });
+    expect(Date.parse(lease.body.data.expiresAt)).toBeGreaterThan(Date.now());
+
+    await client.call('DELETE', path, {
+      token: accessToken, body: { runtimeToken: agent.body.data.runtimeToken },
+    });
+    const revoked = await client.call('PATCH', path, {
+      token: accessToken, body: { runtimeToken: agent.body.data.runtimeToken },
+    });
+    expect(revoked.status).toBe(409);
   });
 
   it('supports a named Agent with a default Session and additional Sessions', async () => {
@@ -228,6 +272,19 @@ describe('identity account API boundaries', () => {
       body: { resumeToken: agent.body.data.resumeToken },
     });
     expect(resume.status).toBe(404);
+
+    const foreignRenewal = await client.call('PATCH',
+      `/v2/account/sessions/${sessionID}/runtime-lease?include_identity=1`, {
+        token: foreign.accessToken, body: { runtimeToken: agent.body.data.runtimeToken },
+      });
+    expect(foreignRenewal.status).toBe(404);
+
+    const ownerRenewal = await client.call('PATCH',
+      `/v2/account/sessions/${sessionID}/runtime-lease?include_identity=1`, {
+        token: owner.accessToken, body: { runtimeToken: agent.body.data.runtimeToken },
+      });
+    expect(ownerRenewal.status).toBe(200);
+    expect(ownerRenewal.body.data.session.id).toBe(sessionID);
 
     const resolved = await client.call(
       'GET',
