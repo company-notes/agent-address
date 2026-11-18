@@ -469,9 +469,10 @@ export class IdentityService {
   ): Promise<ResumedIdentity> {
     const org = await this.organization(accountID);
     const tokenHash = await TokenService.sha256Hex(resumeToken);
-    const lease = await this.leases.prepareResume(org.id, sessionID, runtimeLabel, tokenHash);
+    const now = new Date();
+    const lease = await this.leases.prepareResume(org.id, sessionID, runtimeLabel, tokenHash, now);
     const renewal = runtimeToken
-      ? await this.leases.prepareRenewal(org.id, sessionID, runtimeToken)
+      ? await this.leases.prepareRenewal(org.id, sessionID, runtimeToken, now)
       : null;
 
     // A live matching Runtime wins before idle acquisition; both decisions use

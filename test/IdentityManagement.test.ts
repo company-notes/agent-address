@@ -183,8 +183,9 @@ describe('Organization identity lifecycle (real OAuth, Worker and D1)', () => {
 
   it('one request renews the current Runtime or restores an idle Session without stealing ownership', async () => {
     const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
-    await client.registerOrganization(accessToken);
+    await client.registerOrganization(accessToken, TestClient.uniqueName('recovery'));
     const original = await client.createAgent(accessToken, 'recovery', 'main');
+    expect(original.status).toBe(201);
     const { session, runtimeToken, resumeToken } = original.body.data;
     const path = `/v2/account/sessions/${session.id}/runtime-lease`;
     const body = { runtimeToken, resumeToken, runtimeLabel: 'recovery-test' };

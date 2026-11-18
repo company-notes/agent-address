@@ -41,9 +41,8 @@ export class RuntimeLeaseService {
 
   async prepareResume(
     organizationID: string, sessionID: string, runtimeLabel: string | null,
-    resumeTokenHash: string | null = null,
+    resumeTokenHash: string | null = null, now = new Date(),
   ): Promise<InitialLease> {
-    const now = new Date();
     const expiresAt = RuntimeLeaseService.expiration(now);
 
     const runtimeToken = TokenService.randomToken('runtime');
@@ -103,9 +102,8 @@ export class RuntimeLeaseService {
   }
 
   async prepareRenewal(
-    organizationID: string, sessionID: string, runtimeToken: string,
+    organizationID: string, sessionID: string, runtimeToken: string, now = new Date(),
   ): Promise<{ statement: D1PreparedStatement; expiresAt: string }> {
-    const now = new Date();
     const expiresAt = RuntimeLeaseService.expiration(now);
     const tokenHash = await TokenService.sha256Hex(runtimeToken);
 
