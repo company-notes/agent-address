@@ -58,6 +58,10 @@ export class D1CutoverGuard {
   }
 
   static readTables(mode, extraArgs) {
+    return this.readNames(mode, extraArgs, this.SQLITE_QUERY);
+  }
+
+  static readNames(mode, extraArgs, query) {
     const output = WranglerD1Runner.execute([
       'd1',
       'execute',
@@ -66,7 +70,7 @@ export class D1CutoverGuard {
       '--config',
       '.wrangler.deploy.jsonc',
       '--command',
-      this.SQLITE_QUERY,
+      query,
       '--json',
       ...extraArgs,
     ]);
@@ -113,12 +117,24 @@ export class D1CutoverGuard {
     console.log('D1 schema cutover: current Agent/Session schema verified.');
   }
 
+  static assertWorkMigration(names) {
+    if (!names.includes('work_session_revision_scope')) {
+      throw new Error('D1 schema cutover refused: work Session revision scope migration is not applied.');
+    }
+  }
+
   static main(args) {
     const mode = this.getMode(args);
     const tables = this.readTables(mode, this.getPersistTo(args));
 
     this.assertSafe(tables, args.includes('--require-office-migration'),
       args.includes('--require-address-migration'));
+
+    if (args.includes('--require-address-migration')) {
+      this.assertWorkMigration(this.readNames(mode, this.getPersistTo(args),
+        "SELECT 'work_session_revision_scope' AS name FROM sqlite_master WHERE type = 'trigger' " +
+        "AND name = 'sessions_identity_revision_insert' AND instr(sql, 'WHEN NEW.is_default = 1') > 0"));
+    }
   }
 }
 

@@ -33,6 +33,23 @@ class WorkClaimScenario {
 }
 
 describe('remote work Session lifecycle through real OAuth, HTTP and D1', () => {
+  it('registers a first-time work Organization once when two native works start concurrently', async () => {
+    const scenario = new WorkClaimScenario();
+    const { accessToken: token } = await OAuthTestFlow.signUpAndGetToken();
+    const slug = TestClient.uniqueName('work-owner');
+    const results = await Promise.all([
+      scenario.client.registerOrganization(token, slug + '-a'),
+      scenario.client.registerOrganization(token, slug + '-b'),
+    ]);
+    expect(results.map((result) => result.status).sort()).toEqual([201, 409]);
+
+    const count = await env.DB.prepare(
+      'SELECT COUNT(*) AS total FROM organizations WHERE slug IN (?, ?)',
+    ).bind(slug + '-a', slug + '-b').first<{ total: number }>();
+
+    expect(count?.total).toBe(1);
+  });
+
   it('retries lost and concurrent claims under the same Agent without invalidating the office directory', async () => {
     const scenario = new WorkClaimScenario();
     const { accessToken: token } = await OAuthTestFlow.signUpAndGetToken();
