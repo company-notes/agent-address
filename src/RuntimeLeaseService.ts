@@ -23,11 +23,12 @@ export class RuntimeLeaseService {
     return new Date(now.getTime() + this.LEASE_MS).toISOString();
   }
 
-  async prepareInitialLease(sessionID: string, runtimeLabel: string | null): Promise<InitialLease> {
+  async prepareInitialLease(
+    sessionID: string, runtimeLabel: string | null, runtimeToken = TokenService.randomToken('runtime'),
+  ): Promise<InitialLease> {
     const now = new Date();
     const expiresAt = RuntimeLeaseService.expiration(now);
 
-    const runtimeToken = TokenService.randomToken('runtime');
     const tokenHash = await TokenService.sha256Hex(runtimeToken);
 
     const statement = this.db.prepare(

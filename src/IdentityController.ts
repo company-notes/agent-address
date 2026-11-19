@@ -3,7 +3,7 @@ import { AccountService } from './Accounts';
 import { Env } from './Env';
 import { ApplicationError } from './ApplicationError';
 import { JSONRecord, RequestData, ResponseData } from './HTTP';
-import { NewAgentInput, NewSessionInput } from './IdentityService';
+import { NewAgentInput, NewSessionInput, RuntimeClaim } from './IdentityService';
 import { Services } from './Services';
 
 // The only account-facing HTTP API. MCP calls handleAuthenticated with its OAuth identity.
@@ -73,8 +73,13 @@ export class IdentityController {
         segments.length === 3) {
       const data = await RequestData.readJSON(request);
 
+      const input = IdentityController.newAgentInput(data);
+      const claim = IdentityController.runtimeClaim(data);
+
       return ResponseData.ok(
-        await services.identities.claimAgent(accountID, IdentityController.newAgentInput(data)),
+        claim
+          ? await services.identities.claimWithRegistration(accountID, input, claim)
+          : await services.identities.claimAgent(accountID, input),
         201,
       );
     }
@@ -83,12 +88,13 @@ export class IdentityController {
         segments.length === 5 && method === 'POST') {
       const data = await RequestData.readJSON(request);
 
+      const input = IdentityController.newSessionInput(data);
+      const claim = IdentityController.runtimeClaim(data);
+
       return ResponseData.ok(
-        await services.identities.claimSession(
-          accountID,
-          identifier,
-          IdentityController.newSessionInput(data),
-        ),
+        claim
+          ? await services.identities.claimWithRegistration(accountID, input, claim, identifier)
+          : await services.identities.claimSession(accountID, identifier, input),
         201,
       );
     }
@@ -269,6 +275,30 @@ export class IdentityController {
         ? RequestData.optionalString(data, 'sessionDisplayName', 120)
         : undefined,
     };
+  }
+
+  private static runtimeClaim(data: JSONRecord): RuntimeClaim | undefined {
+    if (!('claim' in data)) {
+      return undefined;
+    }
+
+    const claim = data.claim;
+
+    if (!claim || typeof claim !== 'object' || Array.isArray(claim)) {
+      throw new ApplicationError(400, 'invalid_session_claim', 'A private Session claim object is required.');
+    }
+
+    const value = claim as JSONRecord;
+    const sessionID = RequestData.requiredString(value, 'sessionID', 36);
+    const resumeToken = RequestData.requiredString(value, 'resumeToken', 71);
+    const runtimeToken = RequestData.requiredString(value, 'runtimeToken', 72);
+
+    if (!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(sessionID) ||
+        !/^resume_[a-f0-9]{64}$/.test(resumeToken) || !/^runtime_[a-f0-9]{64}$/.test(runtimeToken)) {
+      throw new ApplicationError(400, 'invalid_session_claim', 'Invalid private Session claim credentials.');
+    }
+
+    return { sessionID, resumeToken, runtimeToken };
   }
 
   private static newSessionInput(data: JSONRecord): NewSessionInput {
