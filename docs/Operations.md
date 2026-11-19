@@ -30,7 +30,7 @@ Agent Address 是 Nuwa Agent Relay 的**身分與地址服務**，回答三個�
 
 部署由 `.github/workflows/deploy.yml` 負責：
 1. 每次推送 GitHub `main`，Actions 先跑 TypeScript、CODE_PRINCIPLES 風格、相依套件安全檢查、Worker/D1/OAuth 情境測試，並使用 Chromium 跑真正的 Portal／OAuth 註冊與 Agent 管理流程。
-2. 從原有 GitHub Secrets `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID` 及 GitHub Variables `CLOUDFLARE_D1_DATABASE_ID`、`CLOUDFLARE_OAUTH_KV_ID`、`CLOUDFLARE_D1_DATABASE_NAME`、`CLOUDFLARE_WORKER_NAME`、`CLOUDFLARE_CUSTOM_DOMAIN`、`ADMIN_ACCESS_TEAM_NAME`、`ADMIN_ALLOWED_EMAILS`、`ADMIN_ACCESS_AUDIENCE` 讀取設定。
+2. 正式部署從 GitHub Secrets `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`、`ADMIN_ACCESS_TEAM_NAME`、`ADMIN_ALLOWED_EMAILS`、`ADMIN_ACCESS_AUDIENCE` 及 GitHub Variables `CLOUDFLARE_D1_DATABASE_ID`、`CLOUDFLARE_OAUTH_KV_ID`、`CLOUDFLARE_D1_DATABASE_NAME`、`CLOUDFLARE_WORKER_NAME`、`CLOUDFLARE_CUSTOM_DOMAIN` 讀取設定。公開 Repository 前，將三個 `ADMIN_*` 值從原 Variables 原樣複製到同名 Repository Secrets；`ADMIN_ALLOWED_EMAILS` 維持原本逗號分隔的格式。驗證 Job 永遠使用 CI 假值；正式部署僅允許 `main`，缺少必要設定時停止，並在 Wrangler 執行前額外遮蔽每個管理員 Email。確認新 Workflow 進入 `main` 後，再移除舊的三個 Variables。
 3. 因為從前的資源被乾淨取代，歷史 GitHub ID Variable 可能是**已刪除的舊 ID**。部署作業的 `scripts/resolve-cloudflare-ids.mjs` 一律從同一 Cloudflare 帳號以唯一原始名稱 `company-notes-agent-address`／`OAUTH_KV` 解析真實 ID，再以 `GITHUB_ENV` 更新本次 Job。此機制不會更改 Repository Variable 的儲存值，避免誤用舊 ID。
 4. `scripts/prepare-deploy.mjs` 生成當次 Wrangler config；Deployment Guard 檢查正確 Cloudflare 帳號、Worker、路由、D1、KV 與 schema，拒絕混合 V1/Session 資料表；只對正確 D1 執行 migration。
 5. Wrangler 更新既有 `agent-address` Worker，再從正式網址及 workers.dev 執行**只讀 Smoke**（OAuth/MCP Discovery、匿名權限、Portal、Admin 保護、靜態資產、V1 路由消失）。
