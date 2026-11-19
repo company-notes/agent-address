@@ -57,3 +57,10 @@ test('legacy, mixed, partial or unknown schemas are always rejected', () => {
     assert.throws(() => D1CutoverGuard.assertSafe(tables), /cutover refused/i);
   }
 });
+
+test('address alias migration is accepted before deployment and required after migration', () => {
+  const previous = [...D1CutoverGuard.CORE_TABLES, ...D1CutoverGuard.OFFICE_TABLES];
+  assert.doesNotThrow(() => D1CutoverGuard.assertSafe(previous, true));
+  assert.throws(() => D1CutoverGuard.assertSafe(previous, true, true), /address alias migration/);
+  assert.doesNotThrow(() => D1CutoverGuard.assertSafe([...previous, ...D1CutoverGuard.ADDRESS_TABLES], true, true));
+});

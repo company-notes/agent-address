@@ -54,6 +54,14 @@ export class AdminController {
       return ResponseData.ok(await this.admin.getAccount(accountID));
     }
 
+    if (resource === 'accounts' && accountID && segments[4] === 'organization' &&
+        segments.length === 5 && method === 'PATCH') {
+      AdminAuthenticator.assertSafeMutation(request);
+
+      const changes = RequestData.organizationChanges(await RequestData.readJSON(request));
+      return ResponseData.ok(await this.admin.updateOrganization(accountID, changes, actorEmail));
+    }
+
     if (resource === 'accounts' && accountID && segments[4] === 'password' &&
         segments.length === 5 && method === 'PUT') {
       AdminAuthenticator.assertSafeMutation(request);

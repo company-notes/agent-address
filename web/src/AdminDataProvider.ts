@@ -48,6 +48,13 @@ export class AdminDataProvider {
     return payload.data;
   }
 
+  async updateOrganization(accountID: string, fields: { slug: string; displayName: string }) {
+    return this.request<{ id: string; slug: string; displayName: string }>(
+      `/accounts/${encodeURIComponent(accountID)}/organization`, {
+        method: 'PATCH', body: JSON.stringify(fields),
+      });
+  }
+
   async resetPassword<T = BaseRecord>(accountId: string, password: string): Promise<T> {
     return this.request<T>(`/accounts/${encodeURIComponent(accountId)}/password`, {
       method: 'PUT',

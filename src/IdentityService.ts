@@ -26,6 +26,7 @@ export type AgentRow = {
   createdAt: string;
   defaultSessionID: string | null;
   defaultSessionHandle: string | null;
+  registrationID: string | null;
 };
 
 type SessionRow = {
@@ -40,6 +41,12 @@ type SessionRow = {
   runtimeLabel: string | null;
   leaseExpiresAt: string | null;
 };
+
+// A left-joined selection still returns the authoritative Organization if all Sessions are absent.
+type ScopedSessionRow = {
+  organizationSlug: string;
+  identityRevision: number;
+} & (SessionRow | { id: null });
 
 export type AgentChanges = {
   agentName?: string;
@@ -89,10 +96,12 @@ export class IdentityService {
   private static readonly AGENT_SELECT = `
     SELECT a.id, a.org_id AS orgId, a.handle, a.display_name AS displayName,
            a.created_at AS createdAt,
-           s.id AS defaultSessionID, s.handle AS defaultSessionHandle
+           s.id AS defaultSessionID, s.handle AS defaultSessionHandle,
+           r.registration_id AS registrationID
       FROM agents a
       LEFT JOIN sessions s ON s.agent_id = a.id
            AND s.is_default = 1 AND s.archived_at IS NULL
+      LEFT JOIN agent_registration_requests r ON r.org_id = a.org_id AND r.agent_id = a.id
   `;
 
   private static readonly SESSION_SELECT = `
@@ -118,6 +127,26 @@ export class IdentityService {
 
   private static handle(value: string | undefined, prefix: string): string {
     return IdentityNames.handle(value ?? this.newHandle(prefix));
+  }
+
+  private async agentHandle(orgID: string, input: NewAgentInput): Promise<string> {
+    if (input.agentName !== undefined) {
+      return IdentityNames.handle(input.agentName);
+    }
+
+    const preferred = IdentityNames.suggestedAgentHandle(input.agentDisplayName);
+
+    if (!preferred) {
+      return IdentityService.newHandle('agent');
+    }
+
+    const occupied = await this.db.prepare(
+      `SELECT id FROM agents WHERE org_id = ? AND handle = ? AND archived_at IS NULL
+       UNION ALL SELECT identity_id AS id FROM address_handle_aliases
+        WHERE kind = 'agent' AND scope_id = ? AND handle = ? LIMIT 1`,
+    ).bind(orgID, preferred, orgID, preferred).first();
+
+    return occupied ? IdentityService.newHandle(preferred.slice(0, 54).replace(/[-_]+$/, '')) : preferred;
   }
 
   private static publicSession(orgSlug: string, row: SessionRow): PublicSession {
@@ -180,6 +209,22 @@ export class IdentityService {
     ).bind(orgID, sessionID);
   }
 
+  private sessionSelectionStatement(orgID: string, sessionIDs: string[]): D1PreparedStatement {
+    const placeholders = sessionIDs.map(() => '?').join(', ');
+
+    // Read the revision, current slug and selected identities in the same SQL snapshot.
+    return this.db.prepare(
+      `SELECT o.slug AS organizationSlug, o.identity_revision AS identityRevision, selected.*
+         FROM organizations o
+         LEFT JOIN (
+           ${IdentityService.SESSION_SELECT}
+           WHERE a.org_id = ? AND s.id IN (${placeholders})
+             AND a.archived_at IS NULL AND s.archived_at IS NULL
+         ) selected ON 1 = 1
+        WHERE o.id = ?`,
+    ).bind(orgID, ...sessionIDs, orgID);
+  }
+
   private async requireSession(orgID: string, sessionID: string): Promise<SessionRow> {
     return IdentityService.requireSessionRow(
       await this.sessionStatement(orgID, sessionID).first<SessionRow>(),
@@ -190,7 +235,7 @@ export class IdentityService {
     const org = await this.organization(accountID);
     const agentID = crypto.randomUUID();
     const sessionID = crypto.randomUUID();
-    const agentHandle = IdentityService.handle(input.agentName, 'agent');
+    const agentHandle = await this.agentHandle(org.id, input);
     const sessionHandle = IdentityNames.handle(input.sessionName ?? 'main');
     const createdAt = new Date().toISOString();
 
@@ -307,7 +352,7 @@ export class IdentityService {
     accountID: string, registrationID: string, input: NewAgentInput,
   ): Promise<{ session: PublicSession }> {
     const org = await this.organization(accountID);
-    const agentHandle = IdentityNames.handle(input.agentName!);
+    const requestedHandle = input.agentName === undefined ? '' : IdentityNames.handle(input.agentName);
     const sessionHandle = IdentityNames.handle(input.sessionName ?? 'main');
 
     const existing = await this.db.prepare(
@@ -322,19 +367,17 @@ export class IdentityService {
     }>();
 
     if (existing) {
-      if (existing.agentHandle !== agentHandle ||
+      if ((input.agentName !== undefined && existing.agentHandle !== requestedHandle) ||
           existing.agentDisplayName !== input.agentDisplayName ||
           existing.sessionHandle !== sessionHandle) {
         throw new ApplicationError(409, 'agent_registration_conflict',
           'An office registration ID already belongs to another identity.');
       }
 
-      const agent = await this.requireAgent(org.id, existing.agentID);
+      await this.requireAgent(org.id, existing.agentID);
       const session = await this.requireSession(org.id, existing.sessionID);
 
-      if (agent.handle !== agentHandle || agent.displayName !== input.agentDisplayName ||
-          session.agentId !== agent.id || session.sessionHandle !== sessionHandle ||
-          session.isDefault !== 1) {
+      if (session.agentId !== existing.agentID) {
         throw new ApplicationError(409, 'agent_registration_conflict',
           'The registered office identity no longer matches its original assignment.');
       }
@@ -354,7 +397,7 @@ export class IdentityService {
              (org_id, registration_id, agent_id, session_id, agent_handle,
               agent_display_name, session_handle, created_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        ).bind(org.id, registrationID, agentID, sessionID, agentHandle,
+        ).bind(org.id, registrationID, agentID, sessionID, requestedHandle,
           input.agentDisplayName!, sessionHandle, new Date().toISOString()),
       ]);
     } catch (error) {
@@ -420,6 +463,28 @@ export class IdentityService {
     return result.results.map((session) => IdentityService.publicSession(org.slug, session));
   }
 
+  async listSelectedSessions(accountID: string, sessionIDs: string[]) {
+    if (sessionIDs.length < 1 || sessionIDs.length > 25 ||
+        new Set(sessionIDs).size !== sessionIDs.length ||
+        sessionIDs.some((id) => !id || id.length > 64)) {
+      throw new ApplicationError(400, 'invalid_session_selection', 'Select 1 to 25 distinct Session IDs.');
+    }
+
+    const org = await this.organization(accountID);
+    const result = await this.sessionSelectionStatement(org.id, sessionIDs).all<ScopedSessionRow>();
+    const scope = result.results[0];
+
+    if (!scope) {
+      throw new ApplicationError(404, 'organization_not_found', 'Organization not found.');
+    }
+
+    return {
+      organization: { id: org.id, slug: scope.organizationSlug, identityRevision: scope.identityRevision },
+      sessions: result.results.flatMap((row) => row.id === null
+        ? [] : [IdentityService.publicSession(row.organizationSlug, row)]),
+    };
+  }
+
   async getSession(accountID: string, sessionID: string): Promise<PublicSession> {
     const org = await this.organization(accountID);
     const session = await this.requireSession(org.id, sessionID);
@@ -435,23 +500,26 @@ export class IdentityService {
       throw new ApplicationError(400, 'invalid_address', 'Use organization/agent or organization/agent/session.');
     }
 
-    if (segments[0] !== org.slug) {
+    if (segments[0] !== org.slug && !await this.organizations.ownsAlias(org.id, segments[0])) {
       throw new ApplicationError(403, 'wrong_organization', 'Address belongs to another Organization.');
     }
 
     const sessionCondition = segments.length === 3
-      ? 's.handle = ? COLLATE NOCASE'
+      ? `(s.handle = ? COLLATE NOCASE OR s.id = (SELECT identity_id FROM address_handle_aliases
+          WHERE kind = 'session' AND scope_id = a.id AND handle = ?))`
       : 's.is_default = 1';
 
     const statement = this.db.prepare(
       `${IdentityService.SESSION_SELECT}
-       WHERE a.org_id = ? AND a.handle = ? COLLATE NOCASE
+       WHERE a.org_id = ? AND (a.handle = ? COLLATE NOCASE OR
+         a.id = (SELECT identity_id FROM address_handle_aliases
+          WHERE kind = 'agent' AND scope_id = a.org_id AND handle = ?))
          AND ${sessionCondition} AND a.archived_at IS NULL AND s.archived_at IS NULL`,
     );
 
     const row = segments.length === 3
-      ? await statement.bind(org.id, segments[1], segments[2]).first<SessionRow>()
-      : await statement.bind(org.id, segments[1]).first<SessionRow>();
+      ? await statement.bind(org.id, segments[1], segments[1], segments[2], segments[2]).first<SessionRow>()
+      : await statement.bind(org.id, segments[1], segments[1]).first<SessionRow>();
 
     if (!row) {
       throw new ApplicationError(404, 'session_not_found', 'Agent or Session address not found.');
@@ -542,16 +610,23 @@ export class IdentityService {
     const org = await this.organization(accountID);
     const lease = await this.leases.prepareRenewal(org.id, sessionID, runtimeToken);
 
-    const [read, renewed] = await this.db.batch<SessionRow>([
-      this.sessionStatement(org.id, sessionID), lease.statement,
+    const [read, renewed] = await this.db.batch<ScopedSessionRow>([
+      this.sessionSelectionStatement(org.id, [sessionID]), lease.statement,
     ]);
-    const session = IdentityService.requireSessionRow(read.results[0]);
+    const session = read.results[0];
+
+    if (!session || session.id === null) {
+      throw new ApplicationError(404, 'session_not_found', 'Session not found in your Organization.');
+    }
+
     this.leases.requireRenewed(renewed);
 
     return {
       expiresAt: lease.expiresAt,
-      organization: { id: org.id, slug: org.slug },
-      session: IdentityService.publicSession(org.slug, {
+      organization: {
+        id: org.id, slug: session.organizationSlug, identityRevision: session.identityRevision,
+      },
+      session: IdentityService.publicSession(session.organizationSlug, {
         ...session, leaseExpiresAt: lease.expiresAt,
       }),
     };

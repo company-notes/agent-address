@@ -1,6 +1,6 @@
 import { AccountService, PasswordHasher } from './Accounts';
 import { ApplicationError } from './ApplicationError';
-import { OrganizationService } from './Organizations';
+import { OrganizationService, type OrganizationChanges } from './Organizations';
 
 export type AdminAccountRow = {
   id: string;
@@ -134,6 +134,21 @@ export class AdminService {
     };
   }
 
+  private audit(accountID: string, actorEmail: string, eventPath: string, now: string) {
+    return this.db.prepare(
+      `INSERT INTO admin_audit
+        (id, actor_email, target_account_id, event_path, created_at)
+        VALUES (?, ?, ?, ?, ?)`,
+    ).bind(crypto.randomUUID(), actorEmail, accountID, eventPath, now);
+  }
+
+  async updateOrganization(accountID: string, changes: OrganizationChanges, actorEmail: string) {
+    await this.accounts.getAccount(accountID);
+
+    return this.organizations.update(accountID, changes,
+      this.audit(accountID, actorEmail, '/accounts/organization/update', new Date().toISOString()));
+  }
+
   async resetPassword(accountID: string, password: string, actorEmail: string) {
     await this.accounts.getAccount(accountID);
 
@@ -147,11 +162,7 @@ export class AdminService {
             SET password_hash = ?, password_salt = ?, auth_version = auth_version + 1
           WHERE id = ?`,
       ).bind(hash, salt, accountID),
-      this.db.prepare(
-        `INSERT INTO admin_audit
-          (id, actor_email, target_account_id, event_path, created_at)
-          VALUES (?, ?, ?, ?, ?)`,
-      ).bind(crypto.randomUUID(), actorEmail, accountID, '/accounts/password/update', now),
+      this.audit(accountID, actorEmail, '/accounts/password/update', now),
     ]);
 
     if (changed.meta.changes !== 1) {

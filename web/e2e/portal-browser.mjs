@@ -149,29 +149,32 @@ try {
   await page.getByRole('heading', { name: slug + '/xiaoming/ffl-dev', exact: true }).waitFor({ timeout: 15000 });
 
   // Change Organization and Agent display names and rename their address handles.
+  const renamedSlug = slug + '-team';
+  await page.getByLabel('Organization handle').fill(renamedSlug);
   await page.getByLabel('Organization display name').fill('Portal E2E Renamed Team');
   await page.getByRole('button', { name: 'Save Organization' }).click();
   await page.getByText('Portal E2E Renamed Team', { exact: true }).waitFor();
+  await page.getByRole('heading', { name: renamedSlug + '/xiaoming/main', exact: true }).waitFor();
 
   await page.getByRole('button', { name: 'Edit Agent' }).first().click();
   await page.getByLabel('Edit address handle').fill('xiaomei');
   await page.getByLabel('Edit display name').fill('小美');
   await page.getByRole('button', { name: 'Save changes' }).click();
-  await page.getByRole('heading', { name: slug + '/xiaomei/main', exact: true }).waitFor();
+  await page.getByRole('heading', { name: renamedSlug + '/xiaomei/main', exact: true }).waitFor();
 
   await page.getByRole('button', { name: 'Edit Session' }).last().click();
   await page.getByLabel('Edit address handle').fill('ffl-qa');
   await page.getByLabel('Edit display name').fill('FFL QA');
   await page.getByRole('button', { name: 'Save changes' }).click();
-  await page.getByRole('heading', { name: slug + '/xiaomei/ffl-qa', exact: true }).waitFor();
+  await page.getByRole('heading', { name: renamedSlug + '/xiaomei/ffl-qa', exact: true }).waitFor();
 
   // Switching the default lets us archive the old main without losing the Agent identity.
   await page.getByRole('button', { name: 'Make Default' }).last().click();
-  await page.getByRole('heading', { name: slug + '/xiaomei/ffl-qa', exact: true })
+  await page.getByRole('heading', { name: renamedSlug + '/xiaomei/ffl-qa', exact: true })
     .locator('..').getByText('Default Session', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Archive Session' }).last().click();
   await page.getByRole('button', { name: 'Archive Session' }).last().click();
-  await page.getByRole('heading', { name: slug + '/xiaomei/main', exact: true }).waitFor({
+  await page.getByRole('heading', { name: renamedSlug + '/xiaomei/main', exact: true }).waitFor({
     state: 'detached',
   });
 

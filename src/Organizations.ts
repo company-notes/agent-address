@@ -8,6 +8,8 @@ export type OrganizationRow = {
   createdAt: string;
 };
 
+export type OrganizationChanges = { slug?: string; displayName?: string };
+
 /** Verified Account and Organization data scoped to a single HTTP request. */
 export type OrganizationScope = {
   accountID: string;
@@ -92,14 +94,38 @@ export class OrganizationService {
 
     return { id, slug, displayName, createdAt };
   }
-  async updateDisplayName(accountID: string, displayName: string): Promise<OrganizationRow> {
-    const current = await this.getForAccount(accountID);
 
-    await this.db.prepare(
-      'UPDATE organizations SET display_name = ? WHERE id = ?',
-    ).bind(displayName, current.id).run();
+  async ownsAlias(organizationID: string, slug: string): Promise<boolean> {
+    const alias = await this.db.prepare(
+      `SELECT identity_id FROM address_handle_aliases
+        WHERE kind = 'organization' AND scope_id = '' AND handle = ? AND identity_id = ?`,
+    ).bind(slug, organizationID).first();
+
+    return alias !== null;
+  }
+
+  async update(
+    accountID: string, changes: OrganizationChanges, audit?: D1PreparedStatement,
+  ): Promise<OrganizationRow> {
+    const current = await this.getForAccount(accountID);
+    const slug = changes.slug === undefined ? current.slug : IdentityNames.organizationSlug(changes.slug);
+    const displayName = changes.displayName ?? current.displayName;
+
+    try {
+      await this.db.batch([
+        this.db.prepare('UPDATE organizations SET slug = ?, display_name = ? WHERE id = ?')
+          .bind(slug, displayName, current.id),
+        ...(audit ? [audit] : []),
+      ]);
+    } catch (error) {
+      if (String(error).includes('UNIQUE constraint failed: organizations.slug')) {
+        console.debug('Organization handle collision:', error);
+        throw new ApplicationError(409, 'organization_name_taken', 'Organization name is already registered.');
+      }
+
+      throw error;
+    }
 
     return this.getByID(current.id);
   }
-
 }

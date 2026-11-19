@@ -96,10 +96,16 @@ export function PortalApp() {
     });
   }
 
-  async function updateOrganization(displayName: string): Promise<void> {
+  async function updateOrganization(fields: OrganizationFields): Promise<void> {
     await action(async () => {
-      await PortalAPI.updateOrganization(displayName.trim());
+      await PortalAPI.updateOrganization({ slug: fields.slug.trim(), displayName: fields.displayName.trim() });
       await refresh();
+
+      if (selectedAgent) {
+        setSessions(await PortalAPI.sessions(selectedAgent.id));
+      }
+
+      setSecret(null);
     });
   }
 
@@ -254,7 +260,7 @@ export function PortalApp() {
                   <OrganizationOverviewCard
                     organization={status.organization}
                     loading={working}
-                    onUpdate={(displayName) => void updateOrganization(displayName)}
+                    onUpdate={(fields) => void updateOrganization(fields)}
                   />
 
                   <Row gutter={[16, 16]}>

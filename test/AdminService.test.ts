@@ -34,6 +34,27 @@ describe('Admin accounts, Agents and Sessions (real D1)', () => {
     expect(JSON.stringify(detail)).not.toMatch(/passwordHash|passwordSalt|tokenHash/i);
   });
 
+  it('renames an Organization as administrator and keeps its existing Agent and audit record', async () => {
+    const email = `${TestClient.uniqueName('rename-admin')}@example.com`;
+    const account = await services.accounts.signUp(email, 'long-password-123', TestClient.REGISTRATION_KEY);
+    const slug = TestClient.uniqueName('company');
+    const organization = await services.organizations.register(account.id, slug, 'Team');
+    const claimed = await services.identities.claimAgent(account.id, { agentName: 'assistant' });
+
+    const renamed = await admin.updateOrganization(account.id, {
+      slug: slug + '-new', displayName: 'Nuwa Team',
+    }, 'operator@example.com');
+    expect(renamed).toMatchObject({ id: organization.id, slug: slug + '-new', displayName: 'Nuwa Team' });
+
+    const detail = await admin.getAccount(account.id);
+    expect(detail.sessions[0]).toMatchObject({
+      id: claimed.session.id, canonical: slug + '-new/assistant/main',
+    });
+    expect(detail.auditEvents).toEqual(expect.arrayContaining([
+      expect.objectContaining({ actorEmail: 'operator@example.com', eventPath: '/accounts/organization/update' }),
+    ]));
+  });
+
   it('handles a new account with no Organization', async () => {
     const email = `${TestClient.uniqueName('unlinked')}@example.com`;
     const account = await services.accounts.signUp(email, 'long-password-123', TestClient.REGISTRATION_KEY);

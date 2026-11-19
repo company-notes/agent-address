@@ -66,9 +66,7 @@ export class IdentityController {
 
     if (method === 'PATCH' && resource === 'organization' && segments.length === 3) {
       const data = await RequestData.readJSON(request);
-      const displayName = RequestData.requiredString(data, 'displayName', 120);
-
-      return ResponseData.ok(await services.organizations.updateDisplayName(accountID, displayName));
+      return ResponseData.ok(await services.organizations.update(accountID, RequestData.organizationChanges(data)));
     }
 
     if (method === 'POST' && resource === 'agent-runtime-leases' &&
@@ -104,7 +102,7 @@ export class IdentityController {
 
       const data = await RequestData.readJSON(request);
       const input: NewAgentInput = {
-        agentName: RequestData.requiredString(data, 'agentName', 64),
+        agentName: RequestData.optionalString(data, 'agentName', 64) ?? undefined,
         agentDisplayName: RequestData.requiredString(data, 'agentDisplayName', 120),
         sessionName: RequestData.optionalString(data, 'sessionName', 64) ?? 'main',
       };
@@ -151,6 +149,12 @@ export class IdentityController {
 
         return ResponseData.ok(await services.identities.registerSession(accountID, identifier, input), 201);
       }
+    }
+
+    if (method === 'GET' && resource === 'sessions' && segments.length === 3) {
+      const sessionIDs = url.searchParams.getAll('session_id');
+
+      return ResponseData.ok(await services.identities.listSelectedSessions(accountID, sessionIDs));
     }
 
     if (resource === 'sessions' && identifier && segments.length === 4) {
