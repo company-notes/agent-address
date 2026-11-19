@@ -96,10 +96,26 @@ jobs:
       CLOUDFLARE_D1_DATABASE_NAME: ${{ vars.CLOUDFLARE_D1_DATABASE_NAME }}
       CLOUDFLARE_WORKER_NAME: ${{ vars.CLOUDFLARE_WORKER_NAME }}
       CLOUDFLARE_CUSTOM_DOMAIN: ${{ vars.CLOUDFLARE_CUSTOM_DOMAIN }}
-      ADMIN_ACCESS_TEAM_NAME: ${{ vars.ADMIN_ACCESS_TEAM_NAME }}
-      ADMIN_ALLOWED_EMAILS: ${{ vars.ADMIN_ALLOWED_EMAILS }}
-      ADMIN_ACCESS_AUDIENCE: ${{ vars.ADMIN_ACCESS_AUDIENCE }}
+      ADMIN_ACCESS_TEAM_NAME: ${{ secrets.ADMIN_ACCESS_TEAM_NAME }}
+      ADMIN_ALLOWED_EMAILS: ${{ secrets.ADMIN_ALLOWED_EMAILS }}
+      ADMIN_ACCESS_AUDIENCE: ${{ secrets.ADMIN_ACCESS_AUDIENCE }}
     steps:
+      - name: Check deployment configuration and mask admin emails
+        shell: bash
+        run: |
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_D1_DATABASE_ID CLOUDFLARE_OAUTH_KV_ID ADMIN_ACCESS_TEAM_NAME ADMIN_ALLOWED_EMAILS ADMIN_ACCESS_AUDIENCE; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing GitHub Actions configuration: ${name}"
+              exit 1
+            fi
+          done
+          # Wrangler may render individual entries of a comma-separated secret.
+          IFS=',' read -r -a admin_emails <<< "$ADMIN_ALLOWED_EMAILS"
+          for email in "${admin_emails[@]}"; do
+            if [ -n "$email" ]; then
+              printf '::add-mask::%s\n' "$email"
+            fi
+          done
       - name: Check out source
         uses: actions/checkout@v4
       - name: Set up Node.js
@@ -113,15 +129,6 @@ jobs:
         run: npm --prefix web ci --no-audit --no-fund
       - name: Build admin UI
         run: npm --prefix web run build
-      - name: Check Cloudflare credentials
-        shell: bash
-        run: |
-          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_D1_DATABASE_ID CLOUDFLARE_OAUTH_KV_ID; do
-            if [ -z "${!name}" ]; then
-              echo "::error::Missing GitHub Actions configuration: ${name}"
-              exit 1
-            fi
-          done
       - name: Resolve canonical Cloudflare resources via existing GitHub Secrets and Variables
         run: node scripts/resolve-cloudflare-ids.mjs
       - name: Generate deployment configuration
