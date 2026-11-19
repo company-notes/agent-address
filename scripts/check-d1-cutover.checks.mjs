@@ -64,3 +64,8 @@ test('address alias migration is accepted before deployment and required after m
   assert.throws(() => D1CutoverGuard.assertSafe(previous, true, true), /address alias migration/);
   assert.doesNotThrow(() => D1CutoverGuard.assertSafe([...previous, ...D1CutoverGuard.ADDRESS_TABLES], true, true));
 });
+
+test('the post-migration guard requires the scoped work Session trigger', () => {
+  assert.throws(() => D1CutoverGuard.assertWorkMigration([]), /work Session revision scope/);
+  assert.doesNotThrow(() => D1CutoverGuard.assertWorkMigration(['work_session_revision_scope']));
+});

@@ -4,6 +4,12 @@ import { OrganizationRow, OrganizationService } from './Organizations';
 import { RuntimeLeaseService } from './RuntimeLeaseService';
 import { TokenService } from './Tokens';
 
+export type RuntimeClaim = {
+  sessionID: string;
+  resumeToken: string;
+  runtimeToken: string;
+};
+
 export type NewAgentInput = {
   agentName?: string;
   sessionName?: string;
@@ -231,15 +237,17 @@ export class IdentityService {
     );
   }
 
-  private async prepareAgent(accountID: string, input: NewAgentInput): Promise<PreparedIdentity> {
+  private async prepareAgent(
+    accountID: string, input: NewAgentInput, claim?: RuntimeClaim,
+  ): Promise<PreparedIdentity> {
     const org = await this.organization(accountID);
     const agentID = crypto.randomUUID();
-    const sessionID = crypto.randomUUID();
+    const sessionID = claim?.sessionID ?? crypto.randomUUID();
     const agentHandle = await this.agentHandle(org.id, input);
     const sessionHandle = IdentityNames.handle(input.sessionName ?? 'main');
     const createdAt = new Date().toISOString();
 
-    const resumeToken = TokenService.randomToken('resume');
+    const resumeToken = claim?.resumeToken ?? TokenService.randomToken('resume');
     const resumeHash = await TokenService.sha256Hex(resumeToken);
 
     const insertAgent = this.db.prepare(
@@ -277,13 +285,14 @@ export class IdentityService {
     accountID: string,
     agentID: string,
     input: NewSessionInput,
+    claim?: RuntimeClaim,
   ): Promise<PreparedIdentity> {
     const org = await this.organization(accountID);
     const agent = await this.requireAgent(org.id, agentID);
-    const sessionID = crypto.randomUUID();
+    const sessionID = claim?.sessionID ?? crypto.randomUUID();
     const handle = IdentityService.handle(input.sessionName, 'session');
 
-    const resumeToken = TokenService.randomToken('resume');
+    const resumeToken = claim?.resumeToken ?? TokenService.randomToken('resume');
     const resumeHash = await TokenService.sha256Hex(resumeToken);
 
     const createdAt = new Date().toISOString();
@@ -324,8 +333,10 @@ export class IdentityService {
     return { session: prepared.session, resumeToken: prepared.resumeToken };
   }
 
-  private async claim(prepared: PreparedIdentity, runtimeLabel: string | null): Promise<ClaimedIdentity> {
-    const lease = await this.leases.prepareInitialLease(prepared.session.id, runtimeLabel);
+  private async claim(
+    prepared: PreparedIdentity, runtimeLabel: string | null, runtimeToken?: string,
+  ): Promise<ClaimedIdentity> {
+    const lease = await this.leases.prepareInitialLease(prepared.session.id, runtimeLabel, runtimeToken);
 
     try {
       await this.db.batch([...prepared.statements, lease.statement]);
@@ -413,6 +424,74 @@ export class IdentityService {
     }
 
     return { session: prepared.session };
+  }
+
+  private async recoverClaim(
+    accountID: string, organizationID: string, claim: RuntimeClaim,
+    runtimeLabel: string | null, agentID?: string,
+  ): Promise<ClaimedIdentity | null> {
+    const existing = await this.db.prepare(
+      `SELECT s.agent_id AS agentID, s.resume_token_hash AS resumeHash
+         FROM sessions s JOIN agents a ON a.id = s.agent_id
+        WHERE s.id = ? AND a.org_id = ?`,
+    ).bind(claim.sessionID, organizationID).first<{ agentID: string; resumeHash: string }>();
+
+    if (!existing) {
+      return null;
+    }
+
+    if ((agentID !== undefined && existing.agentID !== agentID) ||
+        existing.resumeHash !== await TokenService.sha256Hex(claim.resumeToken)) {
+      throw new ApplicationError(409, 'claim_identity_mismatch', 'The private Session claim no longer matches its original identity.');
+    }
+
+    const resumed = await this.resume(
+      accountID, claim.sessionID, claim.resumeToken, runtimeLabel, claim.runtimeToken,
+    );
+
+    return { ...resumed, resumeToken: claim.resumeToken };
+  }
+
+  // The trusted connector retains its initial claim credentials across retries.
+  // Session ID uniqueness and a single D1 batch make creation atomic.
+  async claimWithRegistration(
+    accountID: string, input: NewAgentInput, registration: RuntimeClaim, agentID?: string,
+  ): Promise<ClaimedIdentity> {
+    const org = await this.organization(accountID);
+    const runtimeLabel = input.runtimeLabel ?? null;
+    const recover = () => this.recoverClaim(accountID, org.id, registration, runtimeLabel, agentID);
+    const existing = await recover();
+
+    if (existing) {
+      return existing;
+    }
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const candidate = attempt === 0 || !input.sessionName ? input : {
+        ...input,
+        sessionName: input.sessionName.slice(0, 54).replace(/[-_]+$/, '') + '-' + registration.sessionID.slice(0, 8),
+      };
+      const prepared = agentID
+        ? await this.prepareSession(accountID, agentID, candidate, registration)
+        : await this.prepareAgent(accountID, candidate, registration);
+
+      try {
+        return await this.claim(prepared, runtimeLabel, registration.runtimeToken);
+      } catch (error) {
+        const winner = await recover();
+
+        if (winner) {
+          return winner;
+        }
+
+        if (attempt !== 0 || !agentID || !input.sessionName ||
+            !(error instanceof ApplicationError) || error.code !== 'identity_name_taken') {
+          throw error;
+        }
+      }
+    }
+
+    throw new ApplicationError(409, 'identity_name_taken', 'The work Session name is already in use.');
   }
 
   async registerAgent(accountID: string, input: NewAgentInput): Promise<RegisteredIdentity> {

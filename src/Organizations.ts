@@ -70,8 +70,9 @@ export class OrganizationService {
     }
 
     const record = this.db.prepare(
-      'INSERT INTO organizations (id, slug, display_name, created_at) VALUES (?, ?, ?, ?)',
-    ).bind(id, slug, displayName, createdAt);
+      `INSERT INTO organizations (id, slug, display_name, created_at)
+         SELECT ?, ?, ?, ? FROM accounts WHERE id = ? AND org_id IS NULL`,
+    ).bind(id, slug, displayName, createdAt, accountID);
 
     const assignOwner = this.db.prepare(
       'UPDATE accounts SET org_id = ? WHERE id = ? AND org_id IS NULL',
