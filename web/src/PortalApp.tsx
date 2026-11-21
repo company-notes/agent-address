@@ -12,6 +12,7 @@ import type {
 import { PortalAPI } from './PortalAPI';
 import { EditingIdentity, PortalEditor } from './PortalEditor';
 import { PortalOAuth } from './PortalOAuth';
+import { WakeEndpointEditor } from './WakeEndpointEditor';
 import {
   AgentRegistryCard,
   IdentitySecretNotice,
@@ -34,6 +35,7 @@ export function PortalApp() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [secret, setSecret] = useState<SecretNotice | null>(null);
   const [editing, setEditing] = useState<EditingIdentity | null>(null);
+  const [editingWake, setEditingWake] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -211,6 +213,7 @@ export function PortalApp() {
     setSessions([]);
     setSelectedAgent(null);
     setEditing(null);
+    setEditingWake(null);
     setSecret(null);
   }
 
@@ -285,6 +288,7 @@ export function PortalApp() {
                         onDefault={(sessionID) => void setDefaultSession(sessionID)}
                         onArchive={(sessionID) => void archiveSession(sessionID)}
                         onRotate={(sessionID) => void rotateResumeToken(sessionID)}
+                        onEditWake={setEditingWake}
                       />
                     </Col>
                   </Row>
@@ -295,6 +299,11 @@ export function PortalApp() {
                       rotated={secret.rotated}
                       onClose={() => setSecret(null)}
                     />
+                  )}
+
+                  {editingWake && (
+                    <WakeEndpointEditor session={editingWake}
+                      onClose={() => setEditingWake(null)} />
                   )}
 
                   {editing && (
