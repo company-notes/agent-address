@@ -148,6 +148,54 @@ try {
   await page.getByRole('button', { name: 'Create Session' }).click();
   await page.getByRole('heading', { name: slug + '/xiaoming/ffl-dev', exact: true }).waitFor({ timeout: 15000 });
 
+  // The account owner relocates an existing Wake when Quick Tunnel gets a new host.
+  // The identity flow is a real browser/OAuth/D1 session; only the external
+  // Relay service boundary is intercepted in this Portal-focused scenario.
+  const receiver = { callbackHost: 'old-tunnel.trycloudflare.com' };
+  let updates = 0;
+  await page.route('https://agent-relay.company-notes.com/v2/account-wake/sessions/*/endpoint',
+    async (route) => {
+      const request = route.request();
+      if (request.method() === 'OPTIONS') {
+        await route.fulfill({
+          status: 204,
+          headers: { 'access-control-allow-origin': origin,
+            'access-control-allow-headers': 'authorization,content-type',
+            'access-control-allow-methods': 'GET,PUT,OPTIONS' },
+        });
+        return;
+      }
+
+      assert.match(request.headers().authorization ?? '', /^Bearer /);
+      assert.match(request.url(), /\/v2\/account-wake\/sessions\/[^/]+\/endpoint$/);
+
+      if (request.method() === 'PUT') {
+        assert.deepEqual(request.postDataJSON(), {
+          callbackUrl: 'https://new-tunnel.trycloudflare.com',
+        });
+        receiver.callbackHost = 'new-tunnel.trycloudflare.com';
+        updates += 1;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        headers: { 'access-control-allow-origin': origin },
+        body: JSON.stringify({ ok: true, data: {
+          enabled: true, authMode: 'bearer', callbackHost: receiver.callbackHost,
+        } }),
+      });
+    });
+
+  await page.getByRole('button', { name: 'Edit Wake URL' }).first().click();
+  await page.getByText('old-tunnel.trycloudflare.com', { exact: true }).waitFor();
+  await page.getByLabel('New Tunnel or Webhook HTTPS URL')
+    .fill('https://new-tunnel.trycloudflare.com');
+  await page.getByRole('button', { name: 'Save Wake URL' }).click();
+  await page.getByText('new-tunnel.trycloudflare.com', { exact: true }).waitFor();
+  assert.equal(updates, 1, 'Changing the host is a single authorized update.');
+  await page.getByRole('button', { name: 'Close Wake editor' }).click();
+
   // Change Organization and Agent display names and rename their address handles.
   const renamedSlug = slug + '-team';
   await page.getByLabel('Organization handle').fill(renamedSlug);
