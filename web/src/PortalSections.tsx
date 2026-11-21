@@ -147,6 +147,7 @@ export function SessionRegistryCard({
   onDefault,
   onArchive,
   onRotate,
+  onEditWake,
 }: {
   agent: Agent | null;
   sessions: Session[];
@@ -156,6 +157,7 @@ export function SessionRegistryCard({
   onDefault: (sessionID: string) => void;
   onArchive: (sessionID: string) => void;
   onRotate: (sessionID: string) => void;
+  onEditWake: (session: Session) => void;
 }) {
   return (
     <Card title={agent ? `Sessions: ${agent.handle}` : 'Sessions'}>
@@ -182,6 +184,7 @@ export function SessionRegistryCard({
 
                   <Space wrap size="small">
                     <Button onClick={() => onEdit(session)}>Edit Session</Button>
+                    <Button onClick={() => onEditWake(session)}>Edit Wake URL</Button>
                     <Button
                       disabled={loading || session.isDefault}
                       onClick={() => onDefault(session.id)}
