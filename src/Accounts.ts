@@ -155,6 +155,7 @@ export class AccountService {
         console.debug('Account email collision:', error);
         throw new ApplicationError(409, 'account_exists', 'An account with that email already exists.');
       }
+
       if (failure.includes('UNIQUE constraint failed: organizations.slug') ||
           failure.includes('idx_organizations_unique_display_name')) {
         console.debug('Organization name collision:', error);
