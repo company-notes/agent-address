@@ -199,6 +199,14 @@ try {
   assert.equal(await localizedPage.locator('#portal-language').inputValue(), 'zh-Hans');
   assert.equal(await localizedPage.locator('html').getAttribute('lang'), 'zh-Hans');
 
+  // The signup page must also start in the browser language before any override.
+  await localizedPage.getByRole('button', { name: '登录或创建账号' }).click();
+  await localizedPage.locator('#language').waitFor();
+  assert.equal(await localizedPage.locator('#language').inputValue(), 'zh-Hans');
+  await localizedPage.getByRole('button', { name: '安全登录' }).waitFor();
+  await localizedPage.getByText('创建新账号和组织', { exact: true }).waitFor();
+
+  await localizedPage.goto(origin + '/portal/');
   await localizedPage.locator('#portal-language').selectOption('en');
   await localizedPage.getByRole('button', { name: 'Sign in or create an account' }).waitFor();
   await localizedPage.reload();
