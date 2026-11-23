@@ -53,7 +53,7 @@ export class PortalAPI {
   private static async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     const token = PortalOAuth.getToken();
     if (!token) {
-      throw new Error('Sign in before managing your Organization.');
+      throw new Error(window.NuwaLanguage.t('Sign in before managing your Organization.'));
     }
 
     const response = await fetch('/v2/account' + path, {
@@ -68,7 +68,7 @@ export class PortalAPI {
     const result = await response.json() as APIResult<T>;
 
     if (!result.ok) {
-      throw new Error(result.error.message);
+      throw new Error(window.NuwaLanguage.t(result.error.message));
     }
 
     return result.data;
