@@ -131,7 +131,7 @@
       try {
         saved = window.localStorage.getItem(STORAGE_KEY);
       } catch (error) {
-        // Browser privacy settings can disable persistent storage.
+        void error; // Browser privacy settings can disable persistent storage.
       }
 
       if (saved === 'zh-Hant' || saved === 'zh-Hans' || saved === 'en') return saved;
@@ -175,7 +175,7 @@
       try {
         window.localStorage.setItem(STORAGE_KEY, next);
       } catch (error) {
-        // Manual switching still works in browsers that block storage.
+        void error; // Manual switching still works when browsers block storage.
       }
 
       this.listeners.forEach((listener) => listener());
