@@ -53,9 +53,9 @@ class MCPTestSession {
 
 describe('real MCP client authenticates through OAuth and uses the shared API', () => {
   it('registers an Organization, claims a named Agent and resolves the default Session', async () => {
-    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
-    const session = await MCPTestSession.connect(accessToken);
     const slug = TestClient.uniqueName('mcp');
+    const { accessToken } = await OAuthTestFlow.signUpAndGetToken(slug);
+    const session = await MCPTestSession.connect(accessToken);
 
     expect(await session.listToolNames()).toEqual(expect.arrayContaining([
       'agentAddressEnsureIdentity',
@@ -106,10 +106,9 @@ describe('real MCP client authenticates through OAuth and uses the shared API', 
   });
 
   it('resumes an existing Session by its complete canonical address after release', async () => {
-    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
     const slug = TestClient.uniqueName('resume');
+    const { accessToken } = await OAuthTestFlow.signUpAndGetToken(slug);
     const api = new TestClient();
-    await api.registerOrganization(accessToken, slug);
     const session = await MCPTestSession.connect(accessToken);
 
     const first = await session.call('agentAddressClaimAgent', {
@@ -129,10 +128,9 @@ describe('real MCP client authenticates through OAuth and uses the shared API', 
   });
 
   it('lets a new Codex connection select an idle existing address without changing identity', async () => {
-    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
-    const api = new TestClient();
     const slug = TestClient.uniqueName('select');
-    await api.registerOrganization(accessToken, slug);
+    const { accessToken } = await OAuthTestFlow.signUpAndGetToken(slug);
+    const api = new TestClient();
 
     const original = await MCPTestSession.connect(accessToken);
     const replacement = await MCPTestSession.connect(accessToken);
@@ -168,7 +166,6 @@ describe('real MCP client authenticates through OAuth and uses the shared API', 
   it('recovers when the Portal archives the current Agent during an active MCP connection', async () => {
     const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
     const api = new TestClient();
-    await api.registerOrganization(accessToken, TestClient.uniqueName('revoked'));
     const session = await MCPTestSession.connect(accessToken);
 
     const original = await session.call('agentAddressClaimAgent', {
@@ -197,10 +194,9 @@ describe('real MCP client authenticates through OAuth and uses the shared API', 
   });
 
   it('provides distinct Agent identities for independent runtime connections', async () => {
-    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
-    const client = new TestClient();
     const slug = TestClient.uniqueName('distinct');
-    await client.registerOrganization(accessToken, slug);
+    const { accessToken } = await OAuthTestFlow.signUpAndGetToken(slug);
+    const client = new TestClient();
 
     const first = await MCPTestSession.connect(accessToken);
     const second = await MCPTestSession.connect(accessToken);
