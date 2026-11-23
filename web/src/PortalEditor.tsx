@@ -1,6 +1,7 @@
 import { Button, Form, Input, Modal } from 'antd';
 
 import type { Agent, AgentChanges, Session, SessionChanges } from './PortalAPI';
+import { usePortalLanguage } from './PortalLanguage';
 
 export type EditingIdentity =
   | { kind: 'agent'; agent: Agent }
@@ -24,9 +25,10 @@ export function PortalEditor({
   onSaveAgent: (agentID: string, changes: AgentChanges) => void;
   onSaveSession: (sessionID: string, changes: SessionChanges) => void;
 }) {
+  const { t } = usePortalLanguage();
   const agent = target.kind === 'agent';
   const item = agent ? target.agent : target.session;
-  const title = agent ? 'Edit Agent' : 'Edit Session';
+  const title = agent ? t('Edit Agent') : t('Edit Session');
 
   function save(fields: EditFields): void {
     const handle = fields.handle.trim();
@@ -51,20 +53,20 @@ export function PortalEditor({
       >
         <Form.Item
           name="handle"
-          label={agent ? 'Agent address handle' : 'Session address handle'}
-          rules={[{ required: true, message: 'An address handle is required.' }]}
+          label={agent ? t('Agent address handle') : t('Session address handle')}
+          rules={[{ required: true, message: t('An address handle is required.') }]}
         >
-          <Input aria-label="Edit address handle" />
+          <Input aria-label={t('Edit address handle')} />
         </Form.Item>
 
-        <Form.Item name="displayName" label="Display name">
-          <Input aria-label="Edit display name" />
+        <Form.Item name="displayName" label={t('Display name')}>
+          <Input aria-label={t('Edit display name')} />
         </Form.Item>
 
-        <p>Changing a handle changes the canonical address immediately. Old addresses will not be aliased.</p>
+        <p>{t('Changing a handle changes the canonical address immediately. Old addresses will not be aliased.')}</p>
 
         <Button type="primary" htmlType="submit" loading={loading}>
-          Save changes
+          {t('Save changes')}
         </Button>
       </Form>
     </Modal>
