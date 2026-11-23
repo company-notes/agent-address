@@ -824,6 +824,7 @@ export class IdentityService {
         'UPDATE organizations SET identity_revision = identity_revision + 1 WHERE id = ?',
       ).bind(org.id),
     ];
+
     const results = await this.db.batch(statements);
 
     if (results[2].meta.changes < 1 || results[3].meta.changes < 1) {
