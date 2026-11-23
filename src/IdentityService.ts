@@ -826,7 +826,7 @@ export class IdentityService {
     ];
     const results = await this.db.batch(statements);
 
-    if (results[2].meta.changes !== 1 || results[3].meta.changes !== 1) {
+    if (results[2].meta.changes < 1 || results[3].meta.changes < 1) {
       throw new ApplicationError(409, 'agent_reset_changed',
         'Agent identity changed during permanent cleanup.');
     }
