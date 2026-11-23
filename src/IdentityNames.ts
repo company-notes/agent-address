@@ -19,6 +19,19 @@ export class IdentityNames {
     return slug;
   }
 
+  static organizationDisplayName(value: string): string {
+    const name = value.trim();
+
+    if (!name || name.length > 120) {
+      throw new ApplicationError(
+        400, 'invalid_organization_name',
+        'Organization name must contain 1-120 characters.',
+      );
+    }
+
+    return name;
+  }
+
   static handle(value: string): string {
     const handle = value.trim().toLowerCase();
 
