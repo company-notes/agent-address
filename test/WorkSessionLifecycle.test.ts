@@ -41,7 +41,7 @@ describe('remote work Session lifecycle through real OAuth, HTTP and D1', () => 
       scenario.client.registerOrganization(token, slug + '-a'),
       scenario.client.registerOrganization(token, slug + '-b'),
     ]);
-    expect(results.map((result) => result.status).toEqual([409, 409]);
+    expect(results.map((result) => result.status)).toEqual([409, 409]);
 
     const count = await env.DB.prepare(
       'SELECT COUNT(*) AS total FROM organizations WHERE slug = ?',
