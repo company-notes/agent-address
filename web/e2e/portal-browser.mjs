@@ -186,6 +186,59 @@ try {
   await page.getByRole('button', { name: 'Edit Agent' }).waitFor({ state: 'detached' });
   await page.getByText('Choose an Agent to inspect its Sessions.').waitFor();
 
+
+  // A first-time Simplified Chinese visitor sees the correct language in both
+  // Portal and OAuth, and a manual language choice survives both navigation and reload.
+  const simplifiedContext = await browser.newContext({ locale: 'zh-CN' });
+  const localizedPage = await simplifiedContext.newPage();
+  const localizedErrors = [];
+  localizedPage.on('pageerror', (error) => { localizedErrors.push(error.message); });
+
+  await localizedPage.goto(origin + '/portal/');
+  await localizedPage.getByRole('button', { name: '登录或创建账号' }).waitFor();
+  assert.equal(await localizedPage.locator('#portal-language').inputValue(), 'zh-Hans');
+  assert.equal(await localizedPage.locator('html').getAttribute('lang'), 'zh-Hans');
+
+  // The signup page must also start in the browser language before any override.
+  await localizedPage.getByRole('button', { name: '登录或创建账号' }).click();
+  await localizedPage.locator('#language').waitFor();
+  assert.equal(await localizedPage.locator('#language').inputValue(), 'zh-Hans');
+  await localizedPage.getByRole('button', { name: '安全登录' }).waitFor();
+  await localizedPage.getByText('创建新账号和组织', { exact: true }).waitFor();
+
+  await localizedPage.goto(origin + '/portal/');
+  await localizedPage.locator('#portal-language').selectOption('en');
+  await localizedPage.getByRole('button', { name: 'Sign in or create an account' }).waitFor();
+  await localizedPage.reload();
+  assert.equal(await localizedPage.locator('#portal-language').inputValue(), 'en');
+
+  await localizedPage.getByRole('button', { name: 'Sign in or create an account' }).click();
+  await localizedPage.locator('#language').waitFor();
+  assert.equal(await localizedPage.locator('#language').inputValue(), 'en');
+  await localizedPage.getByText('Create a new account & Organization').waitFor();
+
+  await localizedPage.locator('#language').selectOption('zh-Hant');
+  await localizedPage.getByRole('button', { name: '安全登入' }).waitFor();
+  await localizedPage.getByText('建立新帳號與組織', { exact: true }).waitFor();
+  await localizedPage.reload();
+  assert.equal(await localizedPage.locator('#language').inputValue(), 'zh-Hant');
+  await localizedPage.getByRole('button', { name: '安全登入' }).waitFor();
+
+  await localizedPage.goto(origin + '/portal/');
+  await localizedPage.getByRole('button', { name: '登入或建立帳號' }).waitFor();
+  assert.equal(await localizedPage.locator('#portal-language').inputValue(), 'zh-Hant');
+
+  // No stored preference: Traditional Chinese browsers should select zh-Hant.
+  const traditionalContext = await browser.newContext({ locale: 'zh-TW' });
+  const traditionalPage = await traditionalContext.newPage();
+  await traditionalPage.goto(origin + '/portal/');
+  await traditionalPage.getByRole('button', { name: '登入或建立帳號' }).waitFor();
+  assert.equal(await traditionalPage.locator('#portal-language').inputValue(), 'zh-Hant');
+
+  assert.deepEqual(localizedErrors, [], 'Localized pages must have no uncaught errors');
+  await traditionalContext.close();
+  await simplifiedContext.close();
+
   assert.deepEqual(pageErrors, [], 'Browser must have no uncaught script errors');
   console.log('PASS: real Chromium + Worker + OAuth + D1 — Portal signup, create, rename, default, rotate and archive');
 } finally {

@@ -12,6 +12,7 @@ import type {
 import { PortalAPI } from './PortalAPI';
 import { EditingIdentity, PortalEditor } from './PortalEditor';
 import { PortalOAuth } from './PortalOAuth';
+import { PortalLanguagePicker, usePortalLanguage } from './PortalLanguage';
 import {
   AgentRegistryCard,
   IdentitySecretNotice,
@@ -27,6 +28,7 @@ type SecretNotice = {
 };
 
 export function PortalApp() {
+  const { t } = usePortalLanguage();
   const [token, setToken] = useState<string | null>(null);
   const [status, setStatus] = useState<AccountStatus | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -58,7 +60,7 @@ export function PortalApp() {
         }
       } catch (cause) {
         console.error('Portal login or initialization failed:', cause);
-        setError(cause instanceof Error ? cause.message : 'Unable to load the Portal.');
+        setError(cause instanceof Error ? cause.message : t('Unable to load the Portal.'));
       } finally {
         setLoading(false);
       }
@@ -75,7 +77,7 @@ export function PortalApp() {
       await work();
     } catch (cause) {
       console.error('Organization Portal operation failed:', cause);
-      setError(cause instanceof Error ? cause.message : 'The operation failed.');
+      setError(cause instanceof Error ? cause.message : t('The operation failed.'));
     } finally {
       setWorking(false);
     }
@@ -216,10 +218,11 @@ export function PortalApp() {
 
   return (
     <Layout className="admin-layout">
-      <Layout.Header className="admin-header">
+      <Layout.Header className="admin-header portal-header">
         <Typography.Title level={4} className="admin-title">
-          Agent Address · Organization Portal
+          {t('Agent Address · Organization Portal')}
         </Typography.Title>
+        <PortalLanguagePicker />
       </Layout.Header>
 
       <Layout.Content className="admin-content">
@@ -231,12 +234,12 @@ export function PortalApp() {
           {loading ? (
             <Spin />
           ) : !token ? (
-            <Card title="Organization sign-in">
+            <Card title={t('Organization sign-in')}>
               <Typography.Paragraph>
-                Sign in with your Agent Address email account to manage your Agents and Sessions.
+                {t('Sign in with your Agent Address email account to manage your Agents and Sessions.')}
               </Typography.Paragraph>
               <Button type="primary" onClick={() => void action(() => PortalOAuth.signIn())}>
-                Sign in or create an account
+                {t('Sign in or create an account')}
               </Button>
             </Card>
           ) : (
@@ -246,7 +249,7 @@ export function PortalApp() {
                   <Typography.Text type="secondary">{status?.account.email}</Typography.Text>
                 </Col>
                 <Col>
-                  <Button onClick={signOut}>Sign out</Button>
+                  <Button onClick={signOut}>{t('Sign out')}</Button>
                 </Col>
               </Row>
 

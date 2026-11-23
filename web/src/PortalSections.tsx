@@ -2,6 +2,7 @@ import { Alert, Button, Card, Divider, Form, Input, List, Popconfirm, Space, Tag
 
 import type { Agent, IdentityRegistration, Organization, Session } from './PortalAPI';
 import { OrganizationEditor, type OrganizationFields } from './OrganizationEditor';
+import { usePortalLanguage } from './PortalLanguage';
 
 export type { OrganizationFields } from './OrganizationEditor';
 
@@ -24,19 +25,21 @@ export function OrganizationRegistrationCard({
   loading: boolean;
   onRegister: (fields: OrganizationFields) => void;
 }) {
+  const { t } = usePortalLanguage();
+
   return (
-    <Card title="Register your Organization">
+    <Card title={t('Register your Organization')}>
       <Form layout="vertical" onFinish={onRegister}>
-        <Form.Item label="Organization handle" name="slug" rules={[{ required: true }]}>
+        <Form.Item label={t('Organization handle')} name="slug" rules={[{ required: true }]}>
           <Input placeholder="nuwa" />
         </Form.Item>
 
-        <Form.Item label="Display name" name="displayName" rules={[{ required: true }]}>
+        <Form.Item label={t('Display name')} name="displayName" rules={[{ required: true }]}>
           <Input placeholder="Nuwa Information" />
         </Form.Item>
 
         <Button htmlType="submit" type="primary" loading={loading}>
-          Register Organization
+          {t('Register Organization')}
         </Button>
       </Form>
     </Card>
@@ -52,10 +55,12 @@ export function OrganizationOverviewCard({
   loading: boolean;
   onUpdate: (fields: OrganizationFields) => void;
 }) {
+  const { t } = usePortalLanguage();
+
   return (
     <Card title={organization.displayName}>
       <Typography.Paragraph type="secondary">
-        Organization: {organization.slug}
+        {t('Organization')}: {organization.slug}
       </Typography.Paragraph>
 
       <OrganizationEditor organization={organization} loading={loading} onSave={onUpdate} />
@@ -78,8 +83,10 @@ export function AgentRegistryCard({
   onEdit: (agent: Agent) => void;
   onArchive: (agentID: string) => void;
 }) {
+  const { t } = usePortalLanguage();
+
   return (
-    <Card title="Your Agents">
+    <Card title={t('Your Agents')}>
       <List
         dataSource={agents}
         rowKey="id"
@@ -92,16 +99,16 @@ export function AgentRegistryCard({
               />
 
               <Space wrap size="small">
-                <Button onClick={() => onSelect(agent)}>Sessions</Button>
-                <Button onClick={() => onEdit(agent)}>Edit Agent</Button>
+                <Button onClick={() => onSelect(agent)}>{t('Sessions')}</Button>
+                <Button onClick={() => onEdit(agent)}>{t('Edit Agent')}</Button>
                 <Popconfirm
-                  title="Archive this Agent?"
-                  description="All Sessions will be archived and their Runtime leases revoked."
-                  okText="Archive Agent"
+                  title={t('Archive this Agent?')}
+                  description={t('All Sessions will be archived and their Runtime leases revoked.')}
+                  okText={t('Archive Agent')}
                   okButtonProps={{ danger: true }}
                   onConfirm={() => onArchive(agent.id)}
                 >
-                  <Button danger disabled={loading}>Archive Agent</Button>
+                  <Button danger disabled={loading}>{t('Archive Agent')}</Button>
                 </Popconfirm>
               </Space>
             </div>
@@ -112,26 +119,26 @@ export function AgentRegistryCard({
       <Divider />
 
       <Form layout="vertical" onFinish={onCreate}>
-        <Typography.Title level={5}>Create an Agent</Typography.Title>
+        <Typography.Title level={5}>{t('Create an Agent')}</Typography.Title>
 
-        <Form.Item name="agentName" label="Agent handle (optional)">
+        <Form.Item name="agentName" label={t('Agent handle (optional)')}>
           <Input placeholder="xiaoming" />
         </Form.Item>
 
-        <Form.Item name="agentDisplayName" label="Agent display name (optional)">
+        <Form.Item name="agentDisplayName" label={t('Agent display name (optional)')}>
           <Input placeholder="小明" />
         </Form.Item>
 
-        <Form.Item name="sessionName" label="Default Session handle (optional)">
+        <Form.Item name="sessionName" label={t('Default Session handle (optional)')}>
           <Input placeholder="main" />
         </Form.Item>
 
-        <Form.Item name="sessionDisplayName" label="Default Session display name (optional)">
+        <Form.Item name="sessionDisplayName" label={t('Default Session display name (optional)')}>
           <Input placeholder="主要對話" />
         </Form.Item>
 
         <Button htmlType="submit" loading={loading}>
-          Create Agent
+          {t('Create Agent')}
         </Button>
       </Form>
     </Card>
@@ -157,8 +164,10 @@ export function SessionRegistryCard({
   onArchive: (sessionID: string) => void;
   onRotate: (sessionID: string) => void;
 }) {
+  const { t } = usePortalLanguage();
+
   return (
-    <Card title={agent ? `Sessions: ${agent.handle}` : 'Sessions'}>
+    <Card title={agent ? `${t('Sessions')}: ${agent.handle}` : t('Sessions')}>
       {agent ? (
         <>
           <List
@@ -172,38 +181,38 @@ export function SessionRegistryCard({
                     description={
                       <Space wrap>
                         {session.displayName && <Typography.Text>{session.displayName}</Typography.Text>}
-                        {session.isDefault && <Tag color="blue">Default Session</Tag>}
+                        {session.isDefault && <Tag color="blue">{t('Default Session')}</Tag>}
                         {session.runtime
-                          ? <Tag color="green">Active Runtime: {session.runtime.label ?? 'Unnamed'}</Tag>
-                          : <Tag>Available</Tag>}
+                          ? <Tag color="green">{t('Active Runtime')}: {session.runtime.label ?? t('Unnamed')}</Tag>
+                          : <Tag>{t('Available')}</Tag>}
                       </Space>
                     }
                   />
 
                   <Space wrap size="small">
-                    <Button onClick={() => onEdit(session)}>Edit Session</Button>
+                    <Button onClick={() => onEdit(session)}>{t('Edit Session')}</Button>
                     <Button
                       disabled={loading || session.isDefault}
                       onClick={() => onDefault(session.id)}
                     >
-                      Make Default
+                      {t('Make Default')}
                     </Button>
                     <Popconfirm
-                      title="Replace this Session's resume token?"
-                      description="The previous resume token will stop working immediately."
-                      okText="Rotate Token"
+                      title={t("Replace this Session's resume token?")}
+                      description={t('The previous resume token will stop working immediately.')}
+                      okText={t('Rotate Token')}
                       onConfirm={() => onRotate(session.id)}
                     >
-                      <Button disabled={loading}>Rotate Resume Token</Button>
+                      <Button disabled={loading}>{t('Rotate Resume Token')}</Button>
                     </Popconfirm>
                     <Popconfirm
-                      title="Archive this Session?"
-                      description="This permanently revokes its Runtime lease and resume capability."
-                      okText="Archive Session"
+                      title={t('Archive this Session?')}
+                      description={t('This permanently revokes its Runtime lease and resume capability.')}
+                      okText={t('Archive Session')}
                       okButtonProps={{ danger: true }}
                       onConfirm={() => onArchive(session.id)}
                     >
-                      <Button danger disabled={loading || session.isDefault}>Archive Session</Button>
+                      <Button danger disabled={loading || session.isDefault}>{t('Archive Session')}</Button>
                     </Popconfirm>
                   </Space>
                 </div>
@@ -214,22 +223,22 @@ export function SessionRegistryCard({
           <Divider />
 
           <Form layout="vertical" onFinish={(fields: SessionFields) => onCreate(agent.id, fields)}>
-            <Form.Item name="newSessionName" label="New Session handle (optional)">
+            <Form.Item name="newSessionName" label={t('New Session handle (optional)')}>
               <Input placeholder="ffl-dev" />
             </Form.Item>
 
-            <Form.Item name="newSessionDisplayName" label="New Session display name (optional)">
+            <Form.Item name="newSessionDisplayName" label={t('New Session display name (optional)')}>
               <Input placeholder="FFL 開發" />
             </Form.Item>
 
             <Button htmlType="submit" loading={loading}>
-              Create Session
+              {t('Create Session')}
             </Button>
           </Form>
         </>
       ) : (
         <Typography.Text type="secondary">
-          Choose an Agent to inspect its Sessions.
+          {t('Choose an Agent to inspect its Sessions.')}
         </Typography.Text>
       )}
     </Card>
@@ -245,18 +254,20 @@ export function IdentitySecretNotice({
   rotated: boolean;
   onClose: () => void;
 }) {
+  const { t } = usePortalLanguage();
+
   return (
     <Alert
       type="success"
       showIcon
       closable
       onClose={onClose}
-      message={rotated ? 'Resume token replaced' : 'Created ' + identity.session.canonical}
+      message={rotated ? t('Resume token replaced') : t('Created') + ' ' + identity.session.canonical}
       description={
         <div>
-          <p>Save this one-time resume token securely. A Runtime needs it to resume this Session.</p>
-          <p>Session: <code>{identity.session.canonical}</code></p>
-          <p>Resume token: <code>{identity.resumeToken}</code></p>
+          <p>{t('Save this one-time resume token securely. A Runtime needs it to resume this Session.')}</p>
+          <p>{t('Session')}: <code>{identity.session.canonical}</code></p>
+          <p>{t('Resume token')}: <code>{identity.resumeToken}</code></p>
         </div>
       }
     />

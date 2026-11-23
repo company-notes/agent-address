@@ -14,7 +14,7 @@ export class AuthorizePage {
     'content-type': 'text/html; charset=utf-8',
     'cache-control': 'no-store',
     'x-frame-options': 'DENY',
-    'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'",
+    'content-security-policy': "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; frame-ancestors 'none'",
   };
 
   private static escape(value: string): string {
@@ -62,6 +62,13 @@ export class AuthorizePage {
       font-size: 20px; transform: rotate(-7deg);
     }
     .masthead-note { color: var(--muted); font-size: 13px; font-weight: 600; }
+    .language-picker { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
+    .language-picker label { margin: 0; white-space: nowrap; }
+    .language-picker select {
+      border: 1px solid #bed3c5; background: white; color: var(--ink);
+      border-radius: 9px; padding: 7px 9px; font: inherit; font-size: 13px;
+    }
+    .language-picker select:focus-visible { outline: 3px solid #6fb9a5; outline-offset: 2px; }
     .layout {
       max-width: 1220px; margin: 0 auto; padding: 54px 28px 80px;
       display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, 480px);
@@ -145,6 +152,9 @@ export class AuthorizePage {
     @media (max-width: 480px) {
       .masthead-inner { padding: 14px 20px; }
       .masthead-note { display: none; }
+      .brand { font-size: 19px; }
+      .brand small { font-size: 12px; }
+      .language-picker label { display: none; }
       .intro { padding: 26px 23px; }
       .layout { padding: 18px 14px 48px; }
       .auth-card { padding: 20px; }
@@ -216,10 +226,15 @@ export class AuthorizePage {
     const error = values.error ? `<p class="error" role="alert">${AuthorizePage.escape(values.error)}</p>` : '';
     const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Agent Address</title><style>${AuthorizePage.STYLE}</style></head>
+<title>Agent Address</title><style>${AuthorizePage.STYLE}</style>
+<script defer src="/ui/language.js"></script><script defer src="/ui/authorize-language.js"></script></head>
 <body><header class="masthead"><div class="masthead-inner">
   <div class="brand"><span class="brand-mark">N</span> Nuwa <small>Agent Address</small></div>
   <span class="masthead-note">Secure identity · One Organization, many Agents</span>
+  <div class="language-picker"><label for="language">語言 / Language</label>
+    <select id="language" aria-label="Language"><option value="zh-Hant">繁體中文</option>
+    <option value="zh-Hans">简体中文</option><option value="en">English</option></select>
+  </div>
 </div></header><main class="layout">
   <section class="intro" aria-labelledby="welcome">
     <div class="eyebrow">NUWA · IDENTITY &amp; CONNECTIONS</div>

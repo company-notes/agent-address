@@ -49,7 +49,7 @@ export class PortalOAuth {
     });
 
     if (!registered.ok) {
-      throw new Error('Unable to register the Portal OAuth client.');
+      throw new Error(window.NuwaLanguage.t('Unable to register the Portal OAuth client.'));
     }
 
     const client = await registered.json() as OAuthRegistration;
@@ -94,7 +94,7 @@ export class PortalOAuth {
     const clientID = sessionStorage.getItem(this.CLIENT_KEY);
 
     if (!code || !expectedState || state !== expectedState || !verifier || !clientID) {
-      throw new Error('OAuth authorization callback is incomplete or invalid.');
+      throw new Error(window.NuwaLanguage.t('OAuth authorization callback is incomplete or invalid.'));
     }
 
     const response = await fetch('/token', {
@@ -110,7 +110,7 @@ export class PortalOAuth {
     });
 
     if (!response.ok) {
-      throw new Error('Unable to exchange OAuth authorization code.');
+      throw new Error(window.NuwaLanguage.t('Unable to exchange OAuth authorization code.'));
     }
 
     const result = await response.json() as OAuthTokenResponse;
