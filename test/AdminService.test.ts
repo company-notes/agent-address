@@ -62,7 +62,7 @@ describe('Admin accounts, Agents and Sessions (real D1)', () => {
     );
 
     const detail = await admin.getAccount(account.id);
-    expect(detail.organization.slug).toBe(slug);
+    expect(detail.organization?.slug).toBe(slug);
     expect(detail.agents).toEqual([]);
     expect(detail.sessions).toEqual([]);
   });
