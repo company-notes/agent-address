@@ -9,6 +9,7 @@ A test describes a **real user or Agent scenario** and observes the externally v
 Use the narrowest useful test level, without redundant method-by-method tests:
 
 - **Sign-up atomicity:** two accounts cannot share the same normalized Organization name or handle; a failed sign-up leaves neither an Account nor a stray Organization.
+- **Public localization:** real Chromium checks English, Simplified and Traditional Chinese detection, manual selection, and persisted preference across Portal → OAuth → Portal; internal Admin remains English-only.
 
 - **Integration:** Vitest with `@cloudflare/vitest-plugin` runs the actual Worker, OAuth route, MCP transport and isolated real D1. See `test/CoreFlow.test.ts`, `test/IdentityController.test.ts`, `test/IdentityManagement.test.ts`, `test/MCP.test.ts` and `test/AdminService.test.ts`.
 - **Organization Portal acceptance:** `web/e2e/portal-browser.mjs` drives real Chromium against a real local Wrangler Worker, OAuth sign-up and local D1. **Never mock the Account API in this flow.**
