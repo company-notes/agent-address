@@ -37,6 +37,8 @@ describe('OAuth', () => {
     expect(response.headers.get('x-frame-options')).toBe('DENY');
     expect(html).toContain('Sign in');
     expect(html).toContain('id="su-confirm-password"');
+    expect(html).toContain('name="organizationDisplayName"');
+    expect(html).toContain('name="organizationSlug"');
     expect(html).toContain('name="passwordConfirmation"');
     expect(html).toContain('Registration key');
     expect(JSON.parse(oauthRequest).clientId).toBe(flow.clientId);
@@ -47,10 +49,12 @@ describe('OAuth', () => {
     await flow.registerClient();
     const { oauthRequest } = await flow.openLoginPage();
     const email = `${TestClient.uniqueName('confirmation')}@example.com`;
+    const organizationSlug = TestClient.uniqueName('confirmation');
 
     const mismatch = await flow.submitLogin({
       intent: 'signup', email, password,
       passwordConfirmation: 'a-different-private-password',
+      organizationSlug, organizationDisplayName: 'Mismatch test organization',
       registrationKey: TestClient.REGISTRATION_KEY,
     }, oauthRequest);
 
@@ -60,6 +64,7 @@ describe('OAuth', () => {
 
     const missing = await flow.submitLogin({
       intent: 'signup', email, password,
+      organizationSlug, organizationDisplayName: 'Mismatch test organization',
       registrationKey: TestClient.REGISTRATION_KEY,
     }, oauthRequest);
 
@@ -69,11 +74,58 @@ describe('OAuth', () => {
     const success = await flow.submitLogin({
       intent: 'signup', email, password,
       passwordConfirmation: password,
+      organizationSlug, organizationDisplayName: 'Registration test ' + organizationSlug,
       registrationKey: TestClient.REGISTRATION_KEY,
     }, oauthRequest);
 
     expect(success.status).toBe(302);
     expect(success.headers.get('location')).toContain('code=');
+  });
+
+  it('creates a named Organization atomically and rejects conflicting names and handles', async () => {
+    const original = new OAuthTestFlow();
+    await original.registerClient();
+    const firstPage = await original.openLoginPage();
+    const firstSlug = TestClient.uniqueName('registered');
+    const firstEmail = `${TestClient.uniqueName('owner')}@example.com`;
+    const organizationDisplayName = 'Nuwa testing ' + firstSlug;
+    const first = await original.submitLogin({
+      intent: 'signup', email: firstEmail, password, passwordConfirmation: password,
+      organizationSlug: firstSlug, organizationDisplayName,
+      registrationKey: TestClient.REGISTRATION_KEY,
+    }, firstPage.oauthRequest);
+    expect(first.status).toBe(302);
+
+    const competing = new OAuthTestFlow();
+    await competing.registerClient();
+    const competingPage = await competing.openLoginPage();
+    const secondEmail = `${TestClient.uniqueName('competitor')}@example.com`;
+    const secondSlug = TestClient.uniqueName('other');
+
+    for (const organization of [
+      { organizationSlug: secondSlug, organizationDisplayName: '  ' + organizationDisplayName.toUpperCase() + '  ' },
+      { organizationSlug: firstSlug.toUpperCase(), organizationDisplayName: 'Another ' + secondSlug },
+    ]) {
+      const conflict = await competing.submitLogin({
+        intent: 'signup', email: secondEmail, password, passwordConfirmation: password,
+        ...organization, registrationKey: TestClient.REGISTRATION_KEY,
+      }, competingPage.oauthRequest);
+      expect(conflict.status).toBe(400);
+      expect(await conflict.text()).toContain('Organization name is already registered');
+    }
+
+    const account = await new TestClient().call('GET', '/v2/account/status', {
+      token: (await original.exchangeCode(first)).accessToken,
+    });
+    expect(account.body.data.organization).toMatchObject({
+      slug: firstSlug, displayName: organizationDisplayName,
+    });
+
+    // A collision must not leave behind an account row, even if it passed email validation.
+    const { env } = await import('cloudflare:workers');
+    const orphan = await env.DB.prepare('SELECT id FROM accounts WHERE email = ?')
+      .bind(secondEmail).first();
+    expect(orphan).toBeNull();
   });
 
   it('creates an account and issues tokens through the code flow', async () => {
