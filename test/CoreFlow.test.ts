@@ -7,11 +7,12 @@ import { OAuthTestFlow } from './OAuthFlow';
 describe('core Organization Agent Session scenario (real OAuth, Worker, D1)', () => {
   it('registers the organization, creates two Agents, resolves Sessions, rejects takeover and resumes safely', async () => {
     const client = new TestClient();
-    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
     const slug = TestClient.uniqueName('nuwa');
-
-    const organization = await client.registerOrganization(accessToken, slug);
-    expect(organization.status).toBe(201);
+    const { accessToken } = await OAuthTestFlow.signUpAndGetToken(slug);
+    const status = await client.call('GET', '/v2/account/status', { token: accessToken });
+    const organization = status.body.data.organization;
+    expect(status.status).toBe(200);
+    expect(organization.slug).toBe(slug);
 
     const windows = await client.createAgent(accessToken, undefined, 'ffl-dev');
     expect(windows.status).toBe(201);
@@ -30,7 +31,7 @@ describe('core Organization Agent Session scenario (real OAuth, Worker, D1)', ()
       .first<{ orgID: string; handle: string; isDefault: number }>();
 
     expect(sql).toMatchObject({
-      orgID: organization.body.data.id,
+      orgID: organization.id,
       handle: 'ffl-dev',
       isDefault: 1,
     });
