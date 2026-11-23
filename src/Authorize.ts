@@ -45,8 +45,12 @@ export class AuthorizeController {
     return value;
   }
 
-  private formValues(intent: 'signin' | 'signup', email: string, error: string | null): FormValues {
-    return { intent, email, error, needsRegistrationKey: Boolean(this.env.REGISTRATION_KEY) };
+  private formValues(
+    intent: 'signin' | 'signup', email: string, organizationSlug: string,
+    organizationDisplayName: string, error: string | null,
+  ): FormValues {
+    return { intent, email, organizationSlug, organizationDisplayName,
+      error, needsRegistrationKey: Boolean(this.env.REGISTRATION_KEY) };
   }
 
   private async authenticate(form: FormData, intent: string): Promise<AccountRow> {
@@ -61,7 +65,10 @@ export class AuthorizeController {
     RegistrationCredentials.confirm(password, confirmation);
 
     const registrationKey = AuthorizeController.field(form, 'registrationKey') || null;
-    return this.services.accounts.signUp(email, password, registrationKey);
+    const organizationSlug = AuthorizeController.field(form, 'organizationSlug');
+    const organizationName = AuthorizeController.field(form, 'organizationDisplayName');
+
+    return this.services.accounts.signUp(email, password, registrationKey, organizationSlug, organizationName);
   }
 
   private async parseAuthRequest(request: Request): Promise<AuthRequest> {
@@ -74,7 +81,7 @@ export class AuthorizeController {
   }
 
   async showForm(request: Request): Promise<Response> {
-    return new AuthorizePage(await this.parseAuthRequest(request)).render(this.formValues('signin', '', null));
+    return new AuthorizePage(await this.parseAuthRequest(request)).render(this.formValues('signin', '', '', '', null));
   }
 
   async submitForm(request: Request): Promise<Response> {
@@ -82,6 +89,8 @@ export class AuthorizeController {
     const oauthRequest = AuthorizeController.parseOAuthRequest(AuthorizeController.field(form, 'oauthRequest'));
     const intent = AuthorizeController.parseIntent(AuthorizeController.field(form, 'intent'));
     const email = AuthorizeController.field(form, 'email');
+    const organizationSlug = AuthorizeController.field(form, 'organizationSlug');
+    const organizationDisplayName = AuthorizeController.field(form, 'organizationDisplayName');
 
     let account: AccountRow;
     try {
@@ -92,7 +101,7 @@ export class AuthorizeController {
       }
 
       console.debug('OAuth account authentication rejected:', error.code);
-      return new AuthorizePage(oauthRequest).render(this.formValues(intent, email, error.message));
+      return new AuthorizePage(oauthRequest).render(this.formValues(intent, email, organizationSlug, organizationDisplayName, error.message));
     }
 
     const props: AccountProps = { accountId: account.id, authVersion: account.authVersion };
