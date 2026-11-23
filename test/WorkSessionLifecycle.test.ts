@@ -33,28 +33,27 @@ class WorkClaimScenario {
 }
 
 describe('remote work Session lifecycle through real OAuth, HTTP and D1', () => {
-  it('registers a first-time work Organization once when two native works start concurrently', async () => {
+  it('rejects duplicate Organization registrations after OAuth signup', async () => {
     const scenario = new WorkClaimScenario();
-    const { accessToken: token } = await OAuthTestFlow.signUpAndGetToken();
     const slug = TestClient.uniqueName('work-owner');
+    const { accessToken: token } = await OAuthTestFlow.signUpAndGetToken(slug);
     const results = await Promise.all([
       scenario.client.registerOrganization(token, slug + '-a'),
       scenario.client.registerOrganization(token, slug + '-b'),
     ]);
-    expect(results.map((result) => result.status).sort()).toEqual([201, 409]);
+    expect(results.map((result) => result.status).toEqual([409, 409]);
 
     const count = await env.DB.prepare(
-      'SELECT COUNT(*) AS total FROM organizations WHERE slug IN (?, ?)',
-    ).bind(slug + '-a', slug + '-b').first<{ total: number }>();
+      'SELECT COUNT(*) AS total FROM organizations WHERE slug = ?',
+    ).bind(slug).first<{ total: number }>();
 
     expect(count?.total).toBe(1);
   });
 
   it('retries lost and concurrent claims under the same Agent without invalidating the office directory', async () => {
     const scenario = new WorkClaimScenario();
-    const { accessToken: token } = await OAuthTestFlow.signUpAndGetToken();
     const slug = TestClient.uniqueName('work');
-    await scenario.client.registerOrganization(token, slug);
+    const { accessToken: token } = await OAuthTestFlow.signUpAndGetToken(slug);
 
     const rootClaim = WorkClaimScenario.credentials();
     const roots = await Promise.all([scenario.start(token, rootClaim), scenario.start(token, rootClaim)]);
@@ -102,7 +101,6 @@ describe('remote work Session lifecycle through real OAuth, HTTP and D1', () => 
     expect(wrong.status).toBe(409);
 
     const other = await OAuthTestFlow.signUpAndGetToken();
-    await scenario.client.registerOrganization(other.accessToken, TestClient.uniqueName('foreign'));
     expect((await scenario.start(other.accessToken, firstClaim, agentID)).status).toBe(404);
 
     const renamed = await scenario.client.call('PATCH', `/v2/account/sessions/${firstClaim.sessionID}`, {
