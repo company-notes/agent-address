@@ -113,10 +113,14 @@ try {
 
   await page.goto(origin + '/portal/');
   await page.getByRole('button', { name: 'Sign in or create an account' }).click();
+  await page.getByText('Create a new account & Organization').click();
   await page.locator('#su-email').waitFor({ timeout: 15000 });
 
   const email = 'portal-' + Date.now().toString(36) + '@example.test';
+  const slug = 'portal' + Date.now().toString(36);
   await page.locator('#su-email').fill(email);
+  await page.locator('#su-org-name').fill('Portal E2E Organization ' + slug);
+  await page.locator('#su-org-slug').fill(slug);
   await page.locator('#su-password').fill('Portal-password-2026!');
   await page.locator('#su-confirm-password').fill('incorrect-password-confirmation');
   await page.locator('#su-key').fill(registrationKey);
@@ -128,13 +132,7 @@ try {
   await page.locator('#su-key').fill(registrationKey);
   await page.getByRole('button', { name: 'Create account' }).click();
 
-  await page.getByText('Register your Organization').waitFor({ timeout: 25000 });
-
-  const slug = 'portal' + Date.now().toString(36);
-  await page.locator('#slug').fill(slug);
-  await page.locator('#displayName').fill('Portal E2E Organization');
-  await page.getByRole('button', { name: 'Register Organization' }).click();
-  await page.getByText('Portal E2E Organization').waitFor({ timeout: 15000 });
+  await page.getByText('Portal E2E Organization ' + slug).waitFor({ timeout: 25000 });
 
   await page.locator('#agentName').fill('xiaoming');
   await page.locator('#sessionName').fill('main');
