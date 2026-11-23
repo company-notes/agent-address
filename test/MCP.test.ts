@@ -207,6 +207,7 @@ describe('real MCP client authenticates through OAuth and uses the shared API', 
     await first.close();
     await second.close();
   });
+
   it('auto-claims a persona inside the registered Organization without extra questions', async () => {
     const { accessToken, organizationSlug } = await OAuthTestFlow.signUpAndGetToken();
     const session = await MCPTestSession.connect(accessToken);
