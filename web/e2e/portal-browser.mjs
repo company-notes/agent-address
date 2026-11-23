@@ -211,7 +211,7 @@ try {
 
   await localizedPage.locator('#language').selectOption('zh-Hant');
   await localizedPage.getByRole('button', { name: '安全登入' }).waitFor();
-  await localizedPage.getByText('建立新帳號與組織').waitFor();
+  await localizedPage.getByText('建立新帳號與組織', { exact: true }).waitFor();
   await localizedPage.reload();
   assert.equal(await localizedPage.locator('#language').inputValue(), 'zh-Hant');
   await localizedPage.getByRole('button', { name: '安全登入' }).waitFor();
