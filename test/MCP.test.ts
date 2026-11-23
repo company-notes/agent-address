@@ -52,10 +52,10 @@ class MCPTestSession {
 }
 
 describe('real MCP client authenticates through OAuth and uses the shared API', () => {
-  it('registers an Organization, claims a named Agent and resolves the default Session', async () => {
-    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
-    const session = await MCPTestSession.connect(accessToken);
+  it('sees the signed-up Organization and claims an Agent without re-registering', async () => {
     const slug = TestClient.uniqueName('mcp');
+    const { accessToken } = await OAuthTestFlow.signUpAndGetToken(slug);
+    const session = await MCPTestSession.connect(accessToken);
 
     expect(await session.listToolNames()).toEqual(expect.arrayContaining([
       'agentAddressEnsureIdentity',
@@ -74,10 +74,7 @@ describe('real MCP client authenticates through OAuth and uses the shared API', 
     ]));
 
     const original = await session.call('agentAddressGetStatus');
-    expect(original.data.organization).toBeNull();
-
-    const organization = await session.call('agentAddressRegisterOrganization', { slug, displayName: 'Team' });
-    expect(organization.isError).toBe(false);
+    expect(original.data.organization.slug).toBe(slug);
 
     const claimed = await session.call('agentAddressClaimAgent', {
       agentName: 'xiaoming',
@@ -106,10 +103,9 @@ describe('real MCP client authenticates through OAuth and uses the shared API', 
   });
 
   it('resumes an existing Session by its complete canonical address after release', async () => {
-    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
     const slug = TestClient.uniqueName('resume');
+    const { accessToken } = await OAuthTestFlow.signUpAndGetToken(slug);
     const api = new TestClient();
-    await api.registerOrganization(accessToken, slug);
     const session = await MCPTestSession.connect(accessToken);
 
     const first = await session.call('agentAddressClaimAgent', {
@@ -129,10 +125,9 @@ describe('real MCP client authenticates through OAuth and uses the shared API', 
   });
 
   it('lets a new Codex connection select an idle existing address without changing identity', async () => {
-    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
-    const api = new TestClient();
     const slug = TestClient.uniqueName('select');
-    await api.registerOrganization(accessToken, slug);
+    const { accessToken } = await OAuthTestFlow.signUpAndGetToken(slug);
+    const api = new TestClient();
 
     const original = await MCPTestSession.connect(accessToken);
     const replacement = await MCPTestSession.connect(accessToken);
@@ -168,7 +163,6 @@ describe('real MCP client authenticates through OAuth and uses the shared API', 
   it('recovers when the Portal archives the current Agent during an active MCP connection', async () => {
     const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
     const api = new TestClient();
-    await api.registerOrganization(accessToken, TestClient.uniqueName('revoked'));
     const session = await MCPTestSession.connect(accessToken);
 
     const original = await session.call('agentAddressClaimAgent', {
@@ -197,10 +191,9 @@ describe('real MCP client authenticates through OAuth and uses the shared API', 
   });
 
   it('provides distinct Agent identities for independent runtime connections', async () => {
-    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
-    const client = new TestClient();
     const slug = TestClient.uniqueName('distinct');
-    await client.registerOrganization(accessToken, slug);
+    const { accessToken } = await OAuthTestFlow.signUpAndGetToken(slug);
+    const client = new TestClient();
 
     const first = await MCPTestSession.connect(accessToken);
     const second = await MCPTestSession.connect(accessToken);
@@ -214,8 +207,9 @@ describe('real MCP client authenticates through OAuth and uses the shared API', 
     await first.close();
     await second.close();
   });
-  it('auto-claims a persona address after OAuth without prompting for Organization or secrets', async () => {
-    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
+
+  it('auto-claims a persona inside the registered Organization without extra questions', async () => {
+    const { accessToken, organizationSlug } = await OAuthTestFlow.signUpAndGetToken();
     const session = await MCPTestSession.connect(accessToken);
 
     const created = await session.call('agentAddressEnsureIdentity', {
@@ -224,7 +218,7 @@ describe('real MCP client authenticates through OAuth and uses the shared API', 
 
     expect(created.isError).toBe(false);
     expect(created.data.session.canonical).toMatch(
-      /^personal-[a-f0-9]{12}\/agent-[a-f0-9]{8}\/main$/,
+      new RegExp(`^${organizationSlug}/agent-[a-f0-9]{8}/main$`),
     );
     expect(created.text).not.toMatch(/runtimeToken|resumeToken|runtime_|resume_/);
     expect(created.data.created).toBe(true);

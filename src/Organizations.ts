@@ -54,6 +54,7 @@ export class OrganizationService {
 
   async register(accountID: string, requestedSlug: string, displayName: string): Promise<OrganizationRow> {
     const slug = IdentityNames.organizationSlug(requestedSlug);
+    displayName = IdentityNames.organizationDisplayName(displayName);
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
 
@@ -85,7 +86,8 @@ export class OrganizationService {
         throw new ApplicationError(409, 'account_has_organization', 'Account already belongs to an Organization.');
       }
     } catch (error) {
-      if (String(error).includes('UNIQUE constraint failed: organizations.slug')) {
+      if (String(error).includes('UNIQUE constraint failed: organizations.slug') ||
+          String(error).includes('idx_organizations_unique_display_name')) {
         console.debug('Organization handle collision:', error);
         throw new ApplicationError(409, 'organization_name_taken', 'Organization name is already registered.');
       }
@@ -110,7 +112,7 @@ export class OrganizationService {
   ): Promise<OrganizationRow> {
     const current = await this.getForAccount(accountID);
     const slug = changes.slug === undefined ? current.slug : IdentityNames.organizationSlug(changes.slug);
-    const displayName = changes.displayName ?? current.displayName;
+    const displayName = IdentityNames.organizationDisplayName(changes.displayName ?? current.displayName);
 
     try {
       await this.db.batch([
@@ -119,7 +121,8 @@ export class OrganizationService {
         ...(audit ? [audit] : []),
       ]);
     } catch (error) {
-      if (String(error).includes('UNIQUE constraint failed: organizations.slug')) {
+      if (String(error).includes('UNIQUE constraint failed: organizations.slug') ||
+          String(error).includes('idx_organizations_unique_display_name')) {
         console.debug('Organization handle collision:', error);
         throw new ApplicationError(409, 'organization_name_taken', 'Organization name is already registered.');
       }

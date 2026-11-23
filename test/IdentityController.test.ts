@@ -7,7 +7,7 @@ import { OAuthTestFlow } from './OAuthFlow';
 describe('identity account API boundaries', () => {
   const client = new TestClient();
 
-  it('requires an OAuth account and organization before identities can be created', async () => {
+  it('creates an Organization during OAuth sign-up before identities are registered', async () => {
     const anonymous = await client.call('GET', '/v2/account/agents');
     expect(anonymous.status).toBe(401);
 
@@ -16,17 +16,15 @@ describe('identity account API boundaries', () => {
       token: accessToken,
     });
     expect(status.status).toBe(200);
-    expect(status.body.data.organization).toBeNull();
+    expect(status.body.data.organization.slug).toMatch(/^team[a-z0-9]+$/);
     expect(status.body.data.grantFingerprint).toBeTruthy();
 
-    const unlinked = await client.createAgent(accessToken, 'releasebot', 'main');
-    expect(unlinked.status).toBe(409);
-    expect(unlinked.body.error.code).toBe('no_organization');
+    const created = await client.createAgent(accessToken, 'releasebot', 'main');
+    expect(created.status).toBe(201);
   });
 
   it('accepts only resource-based Runtime claims and rejects retired action endpoints', async () => {
     const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
-    await client.registerOrganization(accessToken, TestClient.uniqueName('resources'));
 
     const retiredClaim = await client.call('POST', '/v2/account/agents/claim', {
       token: accessToken,
@@ -52,9 +50,8 @@ describe('identity account API boundaries', () => {
   });
 
   it('provides a single authenticated account and Runtime identity round trip for Relay', async () => {
-    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
     const slug = TestClient.uniqueName('relay');
-    await client.registerOrganization(accessToken, slug);
+const { accessToken } = await OAuthTestFlow.signUpAndGetToken(slug);
 
     const status = await client.call('GET', '/v2/account/status?include_grant=1', {
       token: accessToken,
@@ -89,9 +86,8 @@ describe('identity account API boundaries', () => {
   });
 
   it('supports a named Agent with a default Session and additional Sessions', async () => {
-    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
     const slug = TestClient.uniqueName('team');
-    await client.registerOrganization(accessToken, slug);
+const { accessToken } = await OAuthTestFlow.signUpAndGetToken(slug);
 
     const agent = await client.createAgent(accessToken, 'xiaoming', 'main');
     expect(agent.status).toBe(201);
@@ -121,9 +117,8 @@ describe('identity account API boundaries', () => {
   });
 
   it('keeps the same managed coworker Agent across a lost registration response and retry', async () => {
-    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
     const slug = TestClient.uniqueName('office');
-    await client.registerOrganization(accessToken, slug);
+const { accessToken } = await OAuthTestFlow.signUpAndGetToken(slug);
 
     const endpoint = '/v2/account/agent-registrations/office-test-native-001';
     const body = {
@@ -166,9 +161,8 @@ describe('identity account API boundaries', () => {
     expect(stolen.status).toBe(409);
     expect(stolen.body.error.code).toBe('identity_name_taken');
 
-    const anotherAccount = await OAuthTestFlow.signUpAndGetToken();
     const anotherSlug = TestClient.uniqueName('office2');
-    await client.registerOrganization(anotherAccount.accessToken, anotherSlug);
+    const anotherAccount = await OAuthTestFlow.signUpAndGetToken(anotherSlug);
     const independent = await client.call('PUT', endpoint, {
       token: anotherAccount.accessToken, body,
     });
@@ -179,9 +173,8 @@ describe('identity account API boundaries', () => {
   });
 
   it('treats ten assistants hosted by one bot as ten Agents with independent main Sessions', async () => {
-    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
     const slug = TestClient.uniqueName('grok');
-    await client.registerOrganization(accessToken, slug);
+const { accessToken } = await OAuthTestFlow.signUpAndGetToken(slug);
 
     for (let index = 0; index < 10; index += 1) {
       const name = 'assistant-' + index;
@@ -201,9 +194,8 @@ describe('identity account API boundaries', () => {
   });
 
   it('rejects old @Host address syntax instead of silently treating it as an Agent', async () => {
-    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
     const slug = TestClient.uniqueName('nolegacy');
-    await client.registerOrganization(accessToken, slug);
+const { accessToken } = await OAuthTestFlow.signUpAndGetToken(slug);
     await client.createAgent(accessToken, 'robot', 'main');
 
     const legacy = await client.call(
@@ -216,9 +208,8 @@ describe('identity account API boundaries', () => {
   });
 
   it('registers an Agent from Portal without occupying its Session, then allows only one Runtime', async () => {
-    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
     const slug = TestClient.uniqueName('portal');
-    await client.registerOrganization(accessToken, slug);
+const { accessToken } = await OAuthTestFlow.signUpAndGetToken(slug);
 
     const registered = await client.call('POST', '/v2/account/agents', {
       token: accessToken,
@@ -253,11 +244,9 @@ describe('identity account API boundaries', () => {
   });
 
   it('prevents cross-organization reads and resume even with a correct address', async () => {
-    const owner = await OAuthTestFlow.signUpAndGetToken();
-    const foreign = await OAuthTestFlow.signUpAndGetToken();
     const ownerSlug = TestClient.uniqueName('owner');
-    await client.registerOrganization(owner.accessToken, ownerSlug);
-    await client.registerOrganization(foreign.accessToken, TestClient.uniqueName('foreign'));
+    const owner = await OAuthTestFlow.signUpAndGetToken(ownerSlug);
+    const foreign = await OAuthTestFlow.signUpAndGetToken();
 
     const agent = await client.createAgent(owner.accessToken, 'private', 'task');
     const sessionID = agent.body.data.session.id;

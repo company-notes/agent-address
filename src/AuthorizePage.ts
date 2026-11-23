@@ -3,6 +3,8 @@ import type { AuthRequest } from '@cloudflare/workers-oauth-provider';
 export type FormValues = {
   intent: 'signin' | 'signup';
   email: string;
+  organizationSlug: string;
+  organizationDisplayName: string;
   error: string | null;
   needsRegistrationKey: boolean;
 };
@@ -26,218 +28,132 @@ export class AuthorizePage {
 
   private static readonly STYLE = `
     :root {
-      color-scheme: dark;
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      color-scheme: light;
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        "Noto Sans TC", Arial, sans-serif;
       font-synthesis: none;
-      background: #070e1d;
-      color: #eef3ff;
+      --ink: #193331;
+      --muted: #59706d;
+      --green: #126857;
+      --cream: #f7f8f3;
+      --line: #dce6e0;
+      background: var(--cream);
+      color: var(--ink);
     }
-
     * { box-sizing: border-box; }
-
-    body {
-      margin: 0;
-      min-height: 100vh;
-      background:
-        radial-gradient(ellipse 65% 75% at 7% 20%, rgba(56, 99, 215, .23), transparent 70%),
-        radial-gradient(ellipse 48% 55% at 95% 85%, rgba(25, 145, 177, .14), transparent 72%),
-        #070e1d;
+    body { margin: 0; min-height: 100vh; line-height: 1.65; }
+    .masthead {
+      border-bottom: 1px solid var(--line);
+      background: rgba(247, 248, 243, .97);
     }
-
-    .layout {
-      width: min(1090px, calc(100% - 48px));
-      margin: 0 auto;
-      min-height: 100vh;
-      display: grid;
-      grid-template-columns: minmax(0, .95fr) minmax(350px, 1.05fr);
-      align-items: center;
-      gap: clamp(32px, 7vw, 105px);
-      padding: 68px 0;
+    .masthead-inner {
+      max-width: 1220px; margin: auto; padding: 17px 28px;
+      display: flex; align-items: center; justify-content: space-between; gap: 14px;
     }
-
-    .eyebrow {
-      display: inline-flex;
-      align-items: center;
-      gap: 9px;
-      padding: 8px 13px;
-      border: 1px solid #36517d;
-      border-radius: 100px;
-      color: #bdcffb;
-      background: rgba(41, 65, 113, .28);
-      font-size: .74rem;
-      font-weight: 750;
-      letter-spacing: .12em;
-      text-transform: uppercase;
+    .brand {
+      display: inline-flex; align-items: center; gap: 11px;
+      color: var(--ink); font-size: 23px; font-weight: 800;
+      letter-spacing: -.07em; text-decoration: none;
     }
-
+    .brand small { font-size: 16px; color: var(--muted); font-weight: 500; letter-spacing: -.02em; }
     .brand-mark {
-      display: inline-grid;
-      place-items: center;
-      width: 23px;
-      height: 23px;
-      background: #a9e8ee;
-      color: #0a233b;
-      border-radius: 7px;
-      font-size: .78rem;
-      font-weight: 900;
+      display: grid; place-items: center; width: 34px; height: 34px;
+      border-radius: 12px 4px 12px 4px; background: var(--green); color: white;
+      font-size: 20px; transform: rotate(-7deg);
     }
-
-    h1 {
-      font-size: clamp(2.5rem, 4.8vw, 4.4rem);
-      line-height: 1.13;
-      letter-spacing: -.06em;
-      margin: 28px 0 20px;
-      font-weight: 780;
+    .masthead-note { color: var(--muted); font-size: 13px; font-weight: 600; }
+    .layout {
+      max-width: 1220px; margin: 0 auto; padding: 54px 28px 80px;
+      display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, 480px);
+      align-items: start; gap: clamp(32px, 5vw, 70px);
     }
-
-    .accent { color: #a9e8ee; }
-
-    .lead {
-      max-width: 28rem;
-      color: #adbbd7;
-      line-height: 1.75;
-      font-size: 1.06rem;
+    .intro {
+      background: #14392f; color: #f6fff9;
+      border-radius: 23px; min-height: 620px;
+      padding: clamp(36px, 4vw, 65px);
+      position: relative; overflow: hidden;
     }
-
+    .intro::after {
+      content: ""; position: absolute; width: 340px; height: 340px;
+      top: -160px; right: -160px; border-radius: 50%;
+      background: rgba(67, 139, 109, .28); filter: blur(45px);
+      pointer-events: none;
+    }
+    .eyebrow { color: #a4e6cf; font-size: 12px; letter-spacing: .14em; font-weight: 850; }
+    h1 { font-size: clamp(40px, 4.7vw, 62px); line-height: 1.16; letter-spacing: -.07em; margin: 28px 0 23px; }
+    .accent { color: #c6f3a5; }
+    .lead { max-width: 32rem; color: #d5e7de; font-size: 17px; line-height: 1.9; }
     .architecture {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 10px;
-      margin-top: 31px;
-      font-size: .81rem;
-      color: #c0ceea;
-      font-weight: 650;
+      display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 37px;
+      color: #e5f3ea; font-size: 13px; font-weight: 700;
     }
-
     .architecture span:not(.arrow) {
-      padding: 9px 12px;
-      border: 1px solid #263d62;
-      border-radius: 10px;
-      background: rgba(19, 36, 69, .72);
+      background: rgba(255, 255, 255, .09); border: 1px solid #5c8f7d;
+      padding: 11px 13px; border-radius: 11px;
     }
-
-    .arrow { color: #6481b6; }
-
+    .arrow { color: #a8d7bf; }
+    .hero-note { color: #b1d3c0; font-size: 13px; margin-top: 42px; max-width: 29rem; }
     .forms { min-width: 0; }
-
     .panel {
-      border: 1px solid #2d4164;
-      background: rgba(15, 28, 53, .93);
-      border-radius: 24px;
-      box-shadow: 0 24px 80px rgba(0, 5, 20, .38);
-      overflow: hidden;
+      border: 1px solid var(--line); border-radius: 19px;
+      background: white; box-shadow: 0 18px 55px rgba(34, 67, 53, .08); overflow: hidden;
     }
-
-    .panel-header {
-      border-bottom: 1px solid #263956;
-      padding: 27px 30px 17px;
-    }
-
-    .panel-header h2 { font-size: 1.45rem; letter-spacing: -.035em; margin: 0 0 7px; }
-
-    .panel-header p { color: #9eafcd; font-size: .88rem; line-height: 1.6; margin: 0; }
-
-    .auth-card { margin: 0; padding: 24px 30px 28px; }
-
-    .auth-card + .auth-card {
-      border-top: 1px solid #293b5a;
-      background: rgba(10, 20, 40, .42);
-    }
-
-    .auth-card h3 {
-      margin: 0 0 14px;
-      color: #e5edff;
-      font-size: 1.03rem;
-      letter-spacing: -.01em;
-    }
-
-    label {
-      display: block;
-      margin: 13px 0 7px;
-      font-size: .84rem;
-      color: #c9d5ec;
-      font-weight: 600;
-    }
-
+    .panel-header { background: #edf4ef; border-bottom: 1px solid var(--line); padding: 27px 30px 22px; }
+    .panel-header h2 { font-size: 25px; margin: 0 0 7px; letter-spacing: -.045em; }
+    .panel-header p { margin: 0; color: var(--muted); font-size: 14px; }
+    .auth-card { margin: 0; padding: 22px 30px 28px; }
+    .auth-card h3 { font-size: 17px; margin: 0 0 8px; }
+    label { display: block; margin: 14px 0 6px; font-size: 13px; font-weight: 750; color: var(--ink); }
     input:not([type="hidden"]) {
-      width: 100%;
-      border-radius: 11px;
-      border: 1px solid #405476;
-      background: #101d35;
-      color: #fff;
-      padding: 11px 14px;
-      min-height: 44px;
-      font: inherit;
-      transition: border-color .15s ease, box-shadow .15s ease;
+      width: 100%; min-height: 46px; padding: 11px 13px;
+      border: 1px solid #bed1c6; border-radius: 9px; background: #fff; color: var(--ink);
+      font: inherit; transition: border-color .15s ease, box-shadow .15s ease;
     }
-
-    input:not([type="hidden"]):focus-visible {
-      outline: 0;
-      border-color: #9de5ec;
-      box-shadow: 0 0 0 3px rgba(109, 226, 240, .18);
+    input::placeholder { color: #849991; }
+    input:focus-visible, button:focus-visible, summary:focus-visible {
+      outline: 3px solid #6fb9a5; outline-offset: 2px;
     }
-
-    input::placeholder { color: #8194b4; }
-
     button {
-      width: 100%;
-      margin-top: 20px;
-      border: 0;
-      border-radius: 11px;
-      min-height: 45px;
-      background: #a9e8ee;
-      color: #10253e;
-      font: inherit;
-      font-weight: 800;
-      cursor: pointer;
-      transition: background .15s ease, transform .15s ease;
+      width: 100%; min-height: 46px; margin-top: 20px; padding: 11px 16px;
+      border: none; border-radius: 10px; background: #126857; color: white;
+      font: inherit; font-size: 15px; font-weight: 800; cursor: pointer;
+      transition: background .15s ease;
     }
-
-    button:hover { background: #cdf7f9; }
-    button:active { transform: translateY(1px); }
-
-    .secondary-button {
-      background: #233858;
-      color: #e1edff;
-      border: 1px solid #435c82;
+    button:hover { background: #0d5143; }
+    .secondary-button { background: #c6f3a5; color: #14392f; }
+    .secondary-button:hover { background: #b6e895; }
+    .signup-disclosure { border-top: 1px solid var(--line); }
+    .signup-disclosure summary {
+      padding: 19px 30px; cursor: pointer; font-size: 14px; font-weight: 800;
+      color: var(--green); background: #fafcf9;
     }
-
-    .secondary-button:hover { background: #2d4770; }
-
-    .subtext {
-      margin: 9px 0 0;
-      font-size: .78rem;
-      line-height: 1.6;
-      color: #9eaeca;
-    }
-
+    .signup-disclosure[open] summary { border-bottom: 1px solid var(--line); background: #edf4ef; }
+    .signup-disclosure .auth-card { padding-top: 24px; }
+    .subtext { font-size: 12px; margin: 7px 0 0; line-height: 1.65; color: var(--muted); }
     .error {
-      padding: 13px 15px;
-      background: #491e34;
-      border: 1px solid #ac5478;
-      color: #ffe4ee;
-      border-radius: 11px;
-      margin: 0 0 16px;
-      line-height: 1.5;
+      margin: 20px 30px 0; padding: 13px 15px; border: 1px solid #e8b8ab;
+      border-radius: 10px; background: #fff2ee; color: #8d3324; line-height: 1.55;
     }
-
-    .footnote { margin-top: 20px; text-align: center; font-size: .75rem; color: #8598b8; }
-
-    @media (max-width: 850px) {
-      .layout { grid-template-columns: 1fr; width: min(530px, calc(100% - 32px)); gap: 22px; padding: 38px 0 44px; min-height: auto; }
-      h1 { margin-top: 20px; margin-bottom: 12px; font-size: 2.4rem; }
-      .lead { margin-bottom: 10px; }
-      .architecture { margin-top: 16px; }
+    .footnote { text-align: center; margin: 20px 0 0; color: var(--muted); font-size: 12px; }
+    @media (max-width: 950px) {
+      .layout { max-width: 660px; grid-template-columns: 1fr; padding: 28px 22px 60px; gap: 24px; }
+      .intro { min-height: auto; padding: 31px; }
+      h1 { margin: 17px 0 12px; }
+      .architecture { margin-top: 22px; }
+      .hero-note { margin-top: 24px; }
     }
-
     @media (max-width: 480px) {
-      .panel-header { padding: 23px 20px 16px; }
+      .masthead-inner { padding: 14px 20px; }
+      .masthead-note { display: none; }
+      .intro { padding: 26px 23px; }
+      .layout { padding: 18px 14px 48px; }
       .auth-card { padding: 20px; }
+      .signup-disclosure summary { padding: 18px 20px; }
+      .panel-header { padding: 22px 20px; }
+      .error { margin: 18px 20px 0; }
     }
-
     @media (prefers-reduced-motion: reduce) {
-      button, input { transition: none !important; }
+      button, input { transition: none; }
     }
   `;
 
@@ -274,6 +190,16 @@ export class AuthorizePage {
       <input id="su-email" name="email" type="email" autocomplete="username" inputmode="email" placeholder="you@example.com" required value="${
         values.intent === 'signup' ? AuthorizePage.escape(values.email) : ''
       }">
+      <label for="su-org-name">Organization name</label>
+      <input id="su-org-name" name="organizationDisplayName" type="text" autocomplete="organization"
+        placeholder="Your company or team name" maxlength="120" required value="${values.intent === 'signup'
+          ? AuthorizePage.escape(values.organizationDisplayName) : ''}">
+      <label for="su-org-slug">Organization address handle</label>
+      <input id="su-org-slug" name="organizationSlug" type="text" autocomplete="off"
+        placeholder="e.g. nuwainfo" minlength="1" maxlength="63"
+        pattern="[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?" required value="${values.intent === 'signup'
+          ? AuthorizePage.escape(values.organizationSlug) : ''}">
+      <p class="subtext">Your Agent addresses will start with this unique handle. Names and handles cannot belong to another Organization.</p>
       <label for="su-password">Password (10+ characters)</label>
       <input id="su-password" name="password" type="password" autocomplete="new-password" minlength="10" maxlength="256" required>
       <label for="su-confirm-password">Confirm password</label>
@@ -291,20 +217,28 @@ export class AuthorizePage {
     const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Agent Address</title><style>${AuthorizePage.STYLE}</style></head>
-<body><main class="layout">
+<body><header class="masthead"><div class="masthead-inner">
+  <div class="brand"><span class="brand-mark">N</span> Nuwa <small>Agent Address</small></div>
+  <span class="masthead-note">Secure identity · One Organization, many Agents</span>
+</div></header><main class="layout">
   <section class="intro" aria-labelledby="welcome">
-    <div class="eyebrow"><span class="brand-mark">N</span> Nuwa identity</div>
+    <div class="eyebrow">NUWA · IDENTITY &amp; CONNECTIONS</div>
     <h1 id="welcome">An address for <span class="accent">every Agent.</span></h1>
-    <p class="lead">Your agents deserve stable identities. Sign in once to connect your Organization, Agents and Sessions — securely.</p>
+    <p class="lead">Give your AI team an address that lasts. Create your Organization once, then connect Agents and Sessions across platforms.</p>
     <div class="architecture" aria-label="Identity hierarchy">
       <span>Organization</span><span class="arrow" aria-hidden="true">/</span>
       <span>Agent</span><span class="arrow" aria-hidden="true">/</span><span>Session</span>
     </div>
+    <p class="hero-note">Choose your Organization name and address handle when you register. Your team starts with the identity you want.</p>
   </section>
   <section class="forms" aria-label="Account authentication">
     <div class="panel">
-      <div class="panel-header"><h2>Welcome to Agent Address</h2><p>Use your account to authorize a trusted Agent or manage its address.</p></div>
-      ${error}${this.signInForm(values)}${this.signUpForm(values)}
+      <div class="panel-header"><h2>Welcome to Nuwa</h2><p>Sign in to continue, or create an account and its Organization together.</p></div>
+      ${error}${this.signInForm(values)}
+      <details class="signup-disclosure" ${values.intent === 'signup' ? 'open' : ''}>
+        <summary>Create a new account &amp; Organization</summary>
+        ${this.signUpForm(values)}
+      </details>
     </div>
     <p class="footnote">Protected by OAuth authorization and private Runtime leases.</p>
   </section>

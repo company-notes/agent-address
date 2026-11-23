@@ -14,9 +14,8 @@ describe('Admin accounts, Agents and Sessions (real D1)', () => {
 
   it('shows actual Organization, Agent, Session relationships but never credentials', async () => {
     const email = `${TestClient.uniqueName('admin')}@example.com`;
-    const account = await services.accounts.signUp(email, 'long-password-123', TestClient.REGISTRATION_KEY);
     const slug = TestClient.uniqueName('company');
-    await services.organizations.register(account.id, slug, 'Team');
+    const account = await services.accounts.signUp(email, 'long-password-123', TestClient.REGISTRATION_KEY, slug, slug);
     const claimed = await services.identities.claimAgent(account.id, {
       agentName: 'releasebot',
       sessionName: 'main',
@@ -36,9 +35,9 @@ describe('Admin accounts, Agents and Sessions (real D1)', () => {
 
   it('renames an Organization as administrator and keeps its existing Agent and audit record', async () => {
     const email = `${TestClient.uniqueName('rename-admin')}@example.com`;
-    const account = await services.accounts.signUp(email, 'long-password-123', TestClient.REGISTRATION_KEY);
     const slug = TestClient.uniqueName('company');
-    const organization = await services.organizations.register(account.id, slug, 'Team');
+    const account = await services.accounts.signUp(email, 'long-password-123', TestClient.REGISTRATION_KEY, slug, slug);
+    const organization = await services.organizations.getForAccount(account.id);
     const claimed = await services.identities.claimAgent(account.id, { agentName: 'assistant' });
 
     const renamed = await admin.updateOrganization(account.id, {
@@ -55,19 +54,23 @@ describe('Admin accounts, Agents and Sessions (real D1)', () => {
     ]));
   });
 
-  it('handles a new account with no Organization', async () => {
+  it('shows the Organization created with a new Account', async () => {
     const email = `${TestClient.uniqueName('unlinked')}@example.com`;
-    const account = await services.accounts.signUp(email, 'long-password-123', TestClient.REGISTRATION_KEY);
+    const slug = TestClient.uniqueName('unlinked');
+    const account = await services.accounts.signUp(
+      email, 'long-password-123', TestClient.REGISTRATION_KEY, slug, slug,
+    );
 
     const detail = await admin.getAccount(account.id);
-    expect(detail.organization).toBeNull();
+    expect(detail.organization?.slug).toBe(slug);
     expect(detail.agents).toEqual([]);
     expect(detail.sessions).toEqual([]);
   });
 
   it('atomically changes a password, audits it, and revokes older OAuth grants', async () => {
     const email = `${TestClient.uniqueName('reset')}@example.com`;
-    const account = await services.accounts.signUp(email, 'old-password-123', TestClient.REGISTRATION_KEY);
+    const slug = TestClient.uniqueName('reset');
+    const account = await services.accounts.signUp(email, 'old-password-123', TestClient.REGISTRATION_KEY, slug, slug);
     const request = new Request(`${TestClient.ORIGIN}/v2/account/status`);
     const controller = new IdentityController(env);
     const before = await controller.handleAuthenticated(account.id, request, 0);

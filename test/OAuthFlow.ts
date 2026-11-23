@@ -26,11 +26,12 @@ export class OAuthTestFlow {
     return exports.default.fetch(new Request(`${TestClient.ORIGIN}${path}`, init));
   }
 
-  static async signUpAndGetToken(): Promise<OAuthTokens & { email: string }> {
+  static async signUpAndGetToken(organizationSlug = TestClient.uniqueName('team')):
+    Promise<OAuthTokens & { email: string; organizationSlug: string }> {
     const email = `${TestClient.uniqueName('user')}@example.com`;
-    const tokens = await new OAuthTestFlow().authorizeAccount('signup', email, OAuthTestFlow.PASSWORD);
+    const tokens = await new OAuthTestFlow().authorizeAccount('signup', email, OAuthTestFlow.PASSWORD, organizationSlug);
 
-    return { ...tokens, email };
+    return { ...tokens, email, organizationSlug };
   }
 
   private readonly verifier = OAuthTestFlow.base64URL(crypto.getRandomValues(new Uint8Array(32)));
@@ -126,13 +127,18 @@ export class OAuthTestFlow {
     return { accessToken: tokens.access_token, refreshToken: tokens.refresh_token };
   }
 
-  async authorizeAccount(intent: 'signin' | 'signup', email: string, password: string): Promise<OAuthTokens> {
+  async authorizeAccount(
+    intent: 'signin' | 'signup', email: string, password: string,
+    organizationSlug = TestClient.uniqueName('team'),
+  ): Promise<OAuthTokens> {
     await this.registerClient();
     const { oauthRequest } = await this.openLoginPage();
     const fields: Record<string, string> = { intent, email, password };
     if (intent === 'signup') {
       fields.registrationKey = TestClient.REGISTRATION_KEY;
       fields.passwordConfirmation = password;
+      fields.organizationSlug = organizationSlug;
+      fields.organizationDisplayName = organizationSlug;
     }
     return this.exchangeCode(await this.submitLogin(fields, oauthRequest));
   }

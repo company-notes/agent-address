@@ -4,9 +4,11 @@ This is the project-specific application of Nuwa's testing guide. Follow [CODE_P
 
 ## What a passing test must prove
 
-A test describes a **real user or Agent scenario** and observes the externally visible result **and persisted D1 state when important**. Test the complete sequence: OAuth sign in → Organization → Agent/Session registration → address resolution → Runtime ownership → release/Resume → revocation.
+A test describes a **real user or Agent scenario** and observes the externally visible result **and persisted D1 state when important**. Test the complete sequence: OAuth sign-up with a unique Organization name/handle → Agent/Session registration → address resolution → Runtime ownership → release/Resume → revocation.
 
 Use the narrowest useful test level, without redundant method-by-method tests:
+
+- **Sign-up atomicity:** two accounts cannot share the same normalized Organization name or handle; a failed sign-up leaves neither an Account nor a stray Organization.
 
 - **Integration:** Vitest with `@cloudflare/vitest-plugin` runs the actual Worker, OAuth route, MCP transport and isolated real D1. See `test/CoreFlow.test.ts`, `test/IdentityController.test.ts`, `test/IdentityManagement.test.ts`, `test/MCP.test.ts` and `test/AdminService.test.ts`.
 - **Organization Portal acceptance:** `web/e2e/portal-browser.mjs` drives real Chromium against a real local Wrangler Worker, OAuth sign-up and local D1. **Never mock the Account API in this flow.**
@@ -25,7 +27,7 @@ MCP tests must use a real `@modelcontextprotocol/sdk` client; tool schema snapsh
 6. Portal registration must not acquire a Runtime lease. Archiving an Agent or Session revokes it and prevents stale credentials from working.
 7. Address Handle rename preserves immutable IDs but removes the old canonical name; no compatibility alias.
 8. OAuth account password reset invalidates old grants; Admin mutations are restricted to the verified Access identity.
-9. A real Chromium user can sign up, register an Organization, register/edit/archive Agent and Sessions, change Default Session and rotate a Resume Token.
+9. A real Chromium user can sign up with a unique named Organization, register/edit/archive Agent and Sessions, change Default Session and rotate a Resume Token.
 10. Legacy Host/Work schema must fail the D1 cutover guard without changing stored data.
 
 ## Commands

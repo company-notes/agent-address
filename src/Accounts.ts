@@ -1,4 +1,5 @@
 import { ApplicationError } from './ApplicationError';
+import { IdentityNames } from './IdentityNames';
 import type { OrganizationRow } from './Organizations';
 
 export type AccountRow = {
@@ -117,7 +118,10 @@ export class AccountService {
     }
   }
 
-  async signUp(email: string, password: string, registrationKey: string | null): Promise<AccountRow> {
+  async signUp(
+    email: string, password: string, registrationKey: string | null,
+    organizationSlug: string, organizationName: string,
+  ): Promise<AccountRow> {
     if (this.registrationKey && registrationKey !== this.registrationKey) {
       throw new ApplicationError(403, 'registration_closed', 'Sign-up requires a valid registration key.');
     }
@@ -127,25 +131,41 @@ export class AccountService {
       throw new ApplicationError(400, 'invalid_email', 'Enter a valid email address.');
     }
 
+    const slug = IdentityNames.organizationSlug(organizationSlug);
+    const displayName = IdentityNames.organizationDisplayName(organizationName);
     const id = crypto.randomUUID();
+    const organizationID = crypto.randomUUID();
     const { hash, salt } = await PasswordHasher.createCredentials(password);
     const createdAt = new Date().toISOString();
 
+    // D1 batch is atomic: a duplicate name or email cannot leave a partial account.
     try {
-      await this.db.prepare(
-        `INSERT INTO accounts (id, email, password_hash, password_salt, created_at)
-         VALUES (?, ?, ?, ?, ?)`,
-      ).bind(id, normalized, hash, salt, createdAt).run();
+      await this.db.batch([
+        this.db.prepare(
+          'INSERT INTO organizations (id, slug, display_name, created_at) VALUES (?, ?, ?, ?)',
+        ).bind(organizationID, slug, displayName, createdAt),
+        this.db.prepare(
+          `INSERT INTO accounts (id, email, password_hash, password_salt, org_id, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+        ).bind(id, normalized, hash, salt, organizationID, createdAt),
+      ]);
     } catch (error) {
-      if (String(error).includes('UNIQUE constraint failed: accounts.email')) {
+      const failure = String(error);
+      if (failure.includes('UNIQUE constraint failed: accounts.email')) {
         console.debug('Account email collision:', error);
         throw new ApplicationError(409, 'account_exists', 'An account with that email already exists.');
+      }
+
+      if (failure.includes('UNIQUE constraint failed: organizations.slug') ||
+          failure.includes('idx_organizations_unique_display_name')) {
+        console.debug('Organization name collision:', error);
+        throw new ApplicationError(409, 'organization_name_taken', 'Organization name is already registered.');
       }
 
       throw error;
     }
 
-    return { id, email: normalized, orgId: null, createdAt, authVersion: 0 };
+    return { id, email: normalized, orgId: organizationID, createdAt, authVersion: 0 };
   }
 
   async logIn(email: string, password: string): Promise<AccountRow> {

@@ -8,9 +8,8 @@ describe('Organization identity lifecycle (real OAuth, Worker and D1)', () => {
   const client = new TestClient();
 
   it('updates human display names and address handles without changing immutable identity', async () => {
-    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
     const slug = TestClient.uniqueName('rename');
-    await client.registerOrganization(accessToken, slug);
+const { accessToken } = await OAuthTestFlow.signUpAndGetToken(slug);
 
     const created = await client.createAgent(accessToken, 'coder', 'ffl');
     expect(created.status).toBe(201);
@@ -86,7 +85,6 @@ describe('Organization identity lifecycle (real OAuth, Worker and D1)', () => {
     expect(reused.status).toBe(409);
 
     const foreign = await OAuthTestFlow.signUpAndGetToken();
-    await client.registerOrganization(foreign.accessToken, TestClient.uniqueName('other'));
     for (const occupied of [slug, slug + '-team']) {
       const collision = await client.call('PATCH', '/v2/account/organization', {
         token: foreign.accessToken, body: { slug: occupied },
@@ -115,9 +113,8 @@ describe('Organization identity lifecycle (real OAuth, Worker and D1)', () => {
   });
 
   it('assigns readable, unique handles to newly named independent and office Agents', async () => {
-    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
     const slug = TestClient.uniqueName('readable');
-    await client.registerOrganization(accessToken, slug);
+const { accessToken } = await OAuthTestFlow.signUpAndGetToken(slug);
 
     const named = await client.call('POST', '/v2/account/agent-runtime-leases', {
       token: accessToken, body: { agentDisplayName: 'ChatGPT' },
@@ -149,9 +146,8 @@ describe('Organization identity lifecycle (real OAuth, Worker and D1)', () => {
   });
 
   it('switches the default Session before archiving; deactivated addresses and capabilities stop working', async () => {
-    const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
     const slug = TestClient.uniqueName('archive');
-    await client.registerOrganization(accessToken, slug);
+const { accessToken } = await OAuthTestFlow.signUpAndGetToken(slug);
 
     const first = await client.createAgent(accessToken, 'robot', 'main');
     const agentID = first.body.data.session.agentId;
@@ -224,11 +220,9 @@ describe('Organization identity lifecycle (real OAuth, Worker and D1)', () => {
   });
 
   it('allows an owner to reset an office Agent and enroll a fresh identity with the same name', async () => {
-    const owner = await OAuthTestFlow.signUpAndGetToken();
-    const outsider = await OAuthTestFlow.signUpAndGetToken();
     const slug = TestClient.uniqueName('reset');
-    await client.registerOrganization(owner.accessToken, slug);
-    await client.registerOrganization(outsider.accessToken, TestClient.uniqueName('other'));
+    const owner = await OAuthTestFlow.signUpAndGetToken(slug);
+    const outsider = await OAuthTestFlow.signUpAndGetToken();
 
     const registered = await client.call('PUT', '/v2/account/agent-registrations/native-bot-123', {
       token: owner.accessToken,
@@ -276,7 +270,6 @@ describe('Organization identity lifecycle (real OAuth, Worker and D1)', () => {
 
   it('rotates a lost resume capability without revoking a current Runtime', async () => {
     const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
-    await client.registerOrganization(accessToken, TestClient.uniqueName('rotate'));
 
     const original = await client.createAgent(accessToken, 'testbot', 'main');
     const sessionID = original.body.data.session.id;
@@ -313,7 +306,6 @@ describe('Organization identity lifecycle (real OAuth, Worker and D1)', () => {
 
   it('one request renews the current Runtime or restores an idle Session without stealing ownership', async () => {
     const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
-    await client.registerOrganization(accessToken, TestClient.uniqueName('recovery'));
     const original = await client.createAgent(accessToken, 'recovery', 'main');
     expect(original.status).toBe(201);
     const { session, runtimeToken, resumeToken } = original.body.data;
@@ -351,11 +343,9 @@ describe('Organization identity lifecycle (real OAuth, Worker and D1)', () => {
   });
 
   it('recovers an idle address for its Organization owner without changing Agent or Session IDs', async () => {
-    const owner = await OAuthTestFlow.signUpAndGetToken();
-    const outsider = await OAuthTestFlow.signUpAndGetToken();
     const slug = TestClient.uniqueName('recovery');
-    await client.registerOrganization(owner.accessToken, slug);
-    await client.registerOrganization(outsider.accessToken, TestClient.uniqueName('other'));
+    const owner = await OAuthTestFlow.signUpAndGetToken(slug);
+    const outsider = await OAuthTestFlow.signUpAndGetToken();
 
     const original = await client.createAgent(owner.accessToken, 'gateway', 'main');
     const sessionID = original.body.data.session.id;
@@ -401,8 +391,6 @@ describe('Organization identity lifecycle (real OAuth, Worker and D1)', () => {
   it('blocks another Organization from modifying, archiving, or rotating an Agent Session', async () => {
     const first = await OAuthTestFlow.signUpAndGetToken();
     const second = await OAuthTestFlow.signUpAndGetToken();
-    await client.registerOrganization(first.accessToken, TestClient.uniqueName('first'));
-    await client.registerOrganization(second.accessToken, TestClient.uniqueName('second'));
 
     const claimed = await client.createAgent(first.accessToken, 'private', 'main');
     const agentID = claimed.body.data.session.agentId;
