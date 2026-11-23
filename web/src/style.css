@@ -30,3 +30,57 @@
     padding: 12px;
   }
 }
+
+/* Public Portal language picker; internal Admin remains single-language. */
+.portal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.portal-header .admin-title {
+  margin-bottom: 0 !important;
+}
+
+.portal-language {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-shrink: 0;
+}
+
+.portal-language label {
+  color: #dceee7;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.portal-language select {
+  color: #193331;
+  background: #fff;
+  border: 1px solid #bed3c5;
+  border-radius: 9px;
+  padding: 7px 9px;
+  font-size: 13px;
+}
+
+.portal-language select:focus-visible {
+  outline: 3px solid #6fb9a5;
+  outline-offset: 2px;
+}
+
+@media (max-width: 560px) {
+  .portal-header {
+    padding: 0 14px;
+    gap: 10px;
+  }
+
+  .portal-header .admin-title {
+    font-size: 15px;
+  }
+
+  .portal-language label {
+    display: none;
+  }
+}
