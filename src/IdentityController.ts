@@ -131,6 +131,19 @@ export class IdentityController {
       }
     }
 
+    if (resource === 'agents' && identifier && action === 'data' &&
+        segments.length === 5 && method === 'DELETE') {
+      const data = await RequestData.readJSON(request);
+      const confirmedID = RequestData.requiredString(data, 'confirmAgentID', 64);
+
+      if (confirmedID !== identifier) {
+        throw new ApplicationError(409, 'reset_confirmation_mismatch',
+          'The confirmed Agent ID does not match the selected Agent.');
+      }
+
+      return ResponseData.ok(await services.identities.purgeAgent(accountID, identifier));
+    }
+
     if (resource === 'agents' && identifier && segments.length === 4) {
       if (method === 'PATCH') {
         const data = await RequestData.readJSON(request);
