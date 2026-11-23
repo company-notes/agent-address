@@ -1,4 +1,4 @@
-import { exports } from 'cloudflare:workers';
+import { env, exports } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 
 import { TestClient } from './Helpers';
@@ -122,7 +122,6 @@ describe('OAuth', () => {
     });
 
     // A collision must not leave behind an account row, even if it passed email validation.
-    const { env } = await import('cloudflare:workers');
     const orphan = await env.DB.prepare('SELECT id FROM accounts WHERE email = ?')
       .bind(secondEmail).first();
     expect(orphan).toBeNull();
