@@ -223,6 +223,57 @@ describe('Organization identity lifecycle (real OAuth, Worker and D1)', () => {
     expect(newAgent.body.data.session.agentId).not.toBe(agentID);
   });
 
+  it('allows an owner to reset an office Agent and enroll a fresh identity with the same name', async () => {
+    const owner = await OAuthTestFlow.signUpAndGetToken();
+    const outsider = await OAuthTestFlow.signUpAndGetToken();
+    const slug = TestClient.uniqueName('reset');
+    await client.registerOrganization(owner.accessToken, slug);
+    await client.registerOrganization(outsider.accessToken, TestClient.uniqueName('other'));
+
+    const registered = await client.call('PUT', '/v2/account/agent-registrations/native-bot-123', {
+      token: owner.accessToken,
+      body: { agentDisplayName: 'GrokBot colleague', agentName: 'grok-colleague' },
+    });
+    expect(registered.status).toBe(200);
+
+    const original = registered.body.data.session;
+    const path = '/v2/account/agents/' + original.agentId + '/data';
+    const denied = await client.call('DELETE', path, {
+      token: outsider.accessToken,
+      body: { confirmAgentID: original.agentId },
+    });
+    expect(denied.status).toBe(404);
+
+    const incorrect = await client.call('DELETE', path, {
+      token: owner.accessToken,
+      body: { confirmAgentID: crypto.randomUUID() },
+    });
+    expect(incorrect.status).toBe(409);
+
+    const deleted = await client.call('DELETE', path, {
+      token: owner.accessToken,
+      body: { confirmAgentID: original.agentId },
+    });
+    expect(deleted.status).toBe(200);
+    expect(deleted.body.data).toEqual({ id: original.agentId, purged: true });
+
+    const gone = await client.call('GET', '/v2/account/addresses?address=' + original.canonical, {
+      token: owner.accessToken,
+    });
+    expect(gone.status).toBe(404);
+
+    const restarted = await client.call('PUT', '/v2/account/agent-registrations/native-bot-123', {
+      token: owner.accessToken,
+      body: { agentDisplayName: 'GrokBot colleague', agentName: 'grok-colleague' },
+    });
+    expect(restarted.status).toBe(200);
+    expect(restarted.body.data.session.canonical).toBe(original.canonical);
+    expect(restarted.body.data.session.id).not.toBe(original.id);
+
+    const foreign = await client.call('GET', '/v2/account/agents', { token: outsider.accessToken });
+    expect(foreign.body.data).toEqual([]);
+  });
+
   it('rotates a lost resume capability without revoking a current Runtime', async () => {
     const { accessToken } = await OAuthTestFlow.signUpAndGetToken();
     await client.registerOrganization(accessToken, TestClient.uniqueName('rotate'));

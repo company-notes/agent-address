@@ -807,6 +807,33 @@ export class IdentityService {
     return { id: sessionID, archived: true };
   }
 
+  /** Permanently releases one owner-selected Agent after Relay and MCP resources are cleared. */
+  async purgeAgent(accountID: string, agentID: string): Promise<{ id: string; purged: true }> {
+    const org = await this.organization(accountID);
+    await this.requireAgent(org.id, agentID);
+
+    const statements = [
+      this.db.prepare(
+        "DELETE FROM address_handle_aliases WHERE kind = 'agent' AND scope_id = ? AND identity_id = ?",
+      ).bind(org.id, agentID),
+      this.db.prepare(
+        "DELETE FROM address_handle_aliases WHERE kind = 'session' AND scope_id = ?",
+      ).bind(agentID),
+      this.db.prepare('DELETE FROM agents WHERE id = ? AND org_id = ?').bind(agentID, org.id),
+      this.db.prepare(
+        'UPDATE organizations SET identity_revision = identity_revision + 1 WHERE id = ?',
+      ).bind(org.id),
+    ];
+    const results = await this.db.batch(statements);
+
+    if (results[2].meta.changes !== 1 || results[3].meta.changes !== 1) {
+      throw new ApplicationError(409, 'agent_reset_changed',
+        'Agent identity changed during permanent cleanup.');
+    }
+
+    return { id: agentID, purged: true };
+  }
+
   async archiveAgent(accountID: string, agentID: string): Promise<{ id: string; archived: true }> {
     const org = await this.organization(accountID);
     await this.requireAgent(org.id, agentID);
