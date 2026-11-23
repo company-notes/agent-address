@@ -52,7 +52,7 @@ class MCPTestSession {
 }
 
 describe('real MCP client authenticates through OAuth and uses the shared API', () => {
-  it('registers an Organization, claims a named Agent and resolves the default Session', async () => {
+  it('sees the signed-up Organization and claims an Agent without re-registering', async () => {
     const slug = TestClient.uniqueName('mcp');
     const { accessToken } = await OAuthTestFlow.signUpAndGetToken(slug);
     const session = await MCPTestSession.connect(accessToken);
@@ -74,10 +74,7 @@ describe('real MCP client authenticates through OAuth and uses the shared API', 
     ]));
 
     const original = await session.call('agentAddressGetStatus');
-    expect(original.data.organization).toBeNull();
-
-    const organization = await session.call('agentAddressRegisterOrganization', { slug, displayName: 'Team' });
-    expect(organization.isError).toBe(false);
+    expect(original.data.organization.slug).toBe(slug);
 
     const claimed = await session.call('agentAddressClaimAgent', {
       agentName: 'xiaoming',
