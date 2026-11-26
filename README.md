@@ -45,7 +45,7 @@ Portal browser ─►│ /portal/            │
 
 The MCP adapter is a client of the same `IdentityController` used by the HTTP API. The shared service layer knows nothing about HTTP, MCP, Cloudflare Access or UI components.
 
-Human MCP users sign in through the OAuth authorization-code flow at `/authorize`, with email/password and a sign-up registration key when configured. New sign-ups must choose a unique Organization display name and address handle together with their email/password. Account and Organization are created in one atomic D1 transaction; a duplicate name, handle or email rejects the entire registration. One account owns at most one Organization in the current identity model.
+Human MCP users sign in through the OAuth authorization-code flow at `/authorize`, with email/password and a sign-up registration key when configured. New sign-ups choose personal or team use and may accept the suggested unique display name and address handle, edit them, or leave either blank for server-generated defaults. Personal and team use share the same Organization namespace model; the choice only selects naming defaults. Both names can be edited in the Portal. Account and Organization are created in one atomic D1 transaction; a duplicate name, handle or email rejects the entire registration. One account owns at most one Organization in the current identity model.
 
 ## Account HTTP API
 

@@ -127,6 +127,36 @@ describe('OAuth', () => {
     expect(orphan).toBeNull();
   });
 
+  it('registers separate personal and team identities without choosing names', async () => {
+    const seen = new Set<string>();
+
+    for (const [organizationType, prefix] of [
+      ['personal', 'personal'], ['personal', 'personal'], ['team', 'company'],
+    ]) {
+      const flow = new OAuthTestFlow();
+      await flow.registerClient();
+      const { oauthRequest } = await flow.openLoginPage();
+      const email = `${TestClient.uniqueName('quick')}@example.com`;
+      const signedUp = await flow.submitLogin({
+        intent: 'signup', email, password, passwordConfirmation: password,
+        organizationType, registrationKey: TestClient.REGISTRATION_KEY,
+      }, oauthRequest);
+      expect(signedUp.status).toBe(302);
+
+      const { accessToken } = await flow.exchangeCode(signedUp);
+      const account = await new TestClient().call('GET', '/v2/account/status', { token: accessToken });
+      expect(account.status).toBe(200);
+      const organization = account.body.data.organization;
+      expect(organization.slug).toMatch(new RegExp('^' + prefix + '-[a-f0-9]{12}$'));
+      expect(organization.displayName.toLowerCase()).toBe(organization.slug.replace('-', ' '));
+      expect(seen.has(organization.slug)).toBe(false);
+      seen.add(organization.slug);
+      const saved = await env.DB.prepare('SELECT org_id FROM accounts WHERE email = ?')
+        .bind(email).first<{ org_id: string }>();
+      expect(saved?.org_id).toBe(organization.id);
+    }
+  });
+
   it('creates an account and issues tokens through the code flow', async () => {
     const tokens = await OAuthTestFlow.signUpAndGetToken();
     expect(tokens.accessToken).toBeTruthy();

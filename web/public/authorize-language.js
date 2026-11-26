@@ -15,6 +15,19 @@
     language.change(selector.value);
   });
 
+  var type = document.getElementById('su-org-type');
+  var fields = [document.getElementById('su-org-name'), document.getElementById('su-org-slug')];
+  var previousType = type.value;
+
+  type.addEventListener('change', function () {
+    fields.forEach(function (field) {
+      if (!field.value.trim() || field.value === field.dataset[previousType]) {
+        field.value = field.dataset[type.value];
+      }
+    });
+    previousType = type.value;
+  });
+
   language.subscribe(render);
   render();
 })();
