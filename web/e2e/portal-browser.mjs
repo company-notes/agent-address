@@ -117,10 +117,16 @@ try {
   await page.locator('#su-email').waitFor({ timeout: 15000 });
 
   const email = 'portal-' + Date.now().toString(36) + '@example.test';
-  const slug = 'portal' + Date.now().toString(36);
+  assert.match(await page.locator('#su-org-slug').inputValue(), /^personal-[a-f0-9]{12}$/);
+  await page.locator('#su-org-type').selectOption('team');
+  assert.match(await page.locator('#su-org-slug').inputValue(), /^company-[a-f0-9]{12}$/);
+  assert.match(await page.locator('#su-org-name').inputValue(), /^Company [a-f0-9]{12}$/);
+  await page.locator('#su-org-type').selectOption('personal');
+  const slug = await page.locator('#su-org-slug').inputValue();
+  const displayName = await page.locator('#su-org-name').inputValue();
+  assert.match(slug, /^personal-[a-f0-9]{12}$/);
+  assert.match(displayName, /^Personal [a-f0-9]{12}$/);
   await page.locator('#su-email').fill(email);
-  await page.locator('#su-org-name').fill('Portal E2E Organization ' + slug);
-  await page.locator('#su-org-slug').fill(slug);
   await page.locator('#su-password').fill('Portal-password-2026!');
   await page.locator('#su-confirm-password').fill('incorrect-password-confirmation');
   await page.locator('#su-key').fill(registrationKey);
@@ -132,7 +138,7 @@ try {
   await page.locator('#su-key').fill(registrationKey);
   await page.getByRole('button', { name: 'Create account' }).click();
 
-  await page.getByText('Portal E2E Organization ' + slug).waitFor({ timeout: 25000 });
+  await page.getByText(displayName, { exact: true }).waitFor({ timeout: 25000 });
 
   await page.locator('#agentName').fill('xiaoming');
   await page.locator('#sessionName').fill('main');
