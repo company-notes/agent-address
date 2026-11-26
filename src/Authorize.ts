@@ -6,6 +6,7 @@ import { Env } from './Env';
 import { ApplicationError } from './ApplicationError';
 import { Services } from './Services';
 import { RegistrationCredentials } from './RegistrationCredentials';
+import { RegistrationNames, type RegistrationType } from './RegistrationNames';
 
 export type AccountProps = {
   accountId: string;
@@ -47,9 +48,9 @@ export class AuthorizeController {
 
   private formValues(
     intent: 'signin' | 'signup', email: string, organizationSlug: string,
-    organizationDisplayName: string, error: string | null,
+    organizationDisplayName: string, error: string | null, organizationType: RegistrationType = 'personal',
   ): FormValues {
-    return { intent, email, organizationSlug, organizationDisplayName,
+    return { intent, email, organizationSlug, organizationDisplayName, organizationType,
       error, needsRegistrationKey: Boolean(this.env.REGISTRATION_KEY) };
   }
 
@@ -68,7 +69,9 @@ export class AuthorizeController {
     const organizationSlug = AuthorizeController.field(form, 'organizationSlug');
     const organizationName = AuthorizeController.field(form, 'organizationDisplayName');
 
-    return this.services.accounts.signUp(email, password, registrationKey, organizationSlug, organizationName);
+    const organizationType = RegistrationNames.type(AuthorizeController.field(form, 'organizationType'));
+
+    return this.services.accounts.signUp(email, password, registrationKey, organizationSlug, organizationName, organizationType);
   }
 
   private async parseAuthRequest(request: Request): Promise<AuthRequest> {
@@ -101,7 +104,9 @@ export class AuthorizeController {
       }
 
       console.debug('OAuth account authentication rejected:', error.code);
-      return new AuthorizePage(oauthRequest).render(this.formValues(intent, email, organizationSlug, organizationDisplayName, error.message));
+      const organizationType = AuthorizeController.field(form, 'organizationType') === 'team' ? 'team' : 'personal';
+
+      return new AuthorizePage(oauthRequest).render(this.formValues(intent, email, organizationSlug, organizationDisplayName, error.message, organizationType));
     }
 
     const props: AccountProps = { accountId: account.id, authVersion: account.authVersion };

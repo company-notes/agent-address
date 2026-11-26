@@ -1,5 +1,5 @@
 import { ApplicationError } from './ApplicationError';
-import { IdentityNames } from './IdentityNames';
+import { RegistrationNames, type RegistrationType } from './RegistrationNames';
 import type { OrganizationRow } from './Organizations';
 
 export type AccountRow = {
@@ -120,7 +120,7 @@ export class AccountService {
 
   async signUp(
     email: string, password: string, registrationKey: string | null,
-    organizationSlug: string, organizationName: string,
+    organizationSlug: string, organizationName: string, organizationType: RegistrationType = 'personal',
   ): Promise<AccountRow> {
     if (this.registrationKey && registrationKey !== this.registrationKey) {
       throw new ApplicationError(403, 'registration_closed', 'Sign-up requires a valid registration key.');
@@ -131,8 +131,7 @@ export class AccountService {
       throw new ApplicationError(400, 'invalid_email', 'Enter a valid email address.');
     }
 
-    const slug = IdentityNames.organizationSlug(organizationSlug);
-    const displayName = IdentityNames.organizationDisplayName(organizationName);
+    const { slug, displayName } = RegistrationNames.resolve(organizationType, organizationSlug, organizationName);
     const id = crypto.randomUUID();
     const organizationID = crypto.randomUUID();
     const { hash, salt } = await PasswordHasher.createCredentials(password);

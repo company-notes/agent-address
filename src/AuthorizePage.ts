@@ -1,10 +1,12 @@
 import type { AuthRequest } from '@cloudflare/workers-oauth-provider';
+import { RegistrationNames, type RegistrationType } from './RegistrationNames';
 
 export type FormValues = {
   intent: 'signin' | 'signup';
   email: string;
   organizationSlug: string;
   organizationDisplayName: string;
+  organizationType: RegistrationType;
   error: string | null;
   needsRegistrationKey: boolean;
 };
@@ -111,7 +113,7 @@ export class AuthorizePage {
     .auth-card { margin: 0; padding: 22px 30px 28px; }
     .auth-card h3 { font-size: 17px; margin: 0 0 8px; }
     label { display: block; margin: 14px 0 6px; font-size: 13px; font-weight: 750; color: var(--ink); }
-    input:not([type="hidden"]) {
+    input:not([type="hidden"]), .auth-card select {
       width: 100%; min-height: 46px; padding: 11px 13px;
       border: 1px solid #bed1c6; border-radius: 9px; background: #fff; color: var(--ink);
       font: inherit; transition: border-color .15s ease, box-shadow .15s ease;
@@ -194,22 +196,32 @@ export class AuthorizePage {
          <input id="su-key" name="registrationKey" type="password" autocomplete="off" required>`
       : '';
 
+    const personal = RegistrationNames.defaults('personal');
+    const team = RegistrationNames.defaults('team');
+    const selected = values.organizationType === 'team' ? team : personal;
+    const slug = values.organizationSlug || selected.slug;
+    const displayName = values.organizationDisplayName || selected.displayName;
+
     return `<form method="post" action="/authorize" class="auth-card">
       <h3>Create an account</h3>${this.hiddenFields('signup')}
       <label for="su-email">Email</label>
       <input id="su-email" name="email" type="email" autocomplete="username" inputmode="email" placeholder="you@example.com" required value="${
         values.intent === 'signup' ? AuthorizePage.escape(values.email) : ''
       }">
-      <label for="su-org-name">Organization name</label>
+      <label for="su-org-type">How will you use Nuwa?</label>
+      <select id="su-org-type" name="organizationType">
+        <option value="personal" ${values.organizationType === 'personal' ? 'selected' : ''}>Personal</option>
+        <option value="team" ${values.organizationType === 'team' ? 'selected' : ''}>Team</option>
+      </select>
+      <label for="su-org-name">Display name (optional)</label>
       <input id="su-org-name" name="organizationDisplayName" type="text" autocomplete="organization"
-        placeholder="Your company or team name" maxlength="120" required value="${values.intent === 'signup'
-          ? AuthorizePage.escape(values.organizationDisplayName) : ''}">
-      <label for="su-org-slug">Organization address handle</label>
+        maxlength="120" value="${AuthorizePage.escape(displayName)}"
+        data-personal="${personal.displayName}" data-team="${team.displayName}">
+      <label for="su-org-slug">Address handle (optional)</label>
       <input id="su-org-slug" name="organizationSlug" type="text" autocomplete="off"
-        placeholder="e.g. nuwainfo" minlength="1" maxlength="63"
-        pattern="[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?" required value="${values.intent === 'signup'
-          ? AuthorizePage.escape(values.organizationSlug) : ''}">
-      <p class="subtext">Your Agent addresses will start with this unique handle. Names and handles cannot belong to another Organization.</p>
+        maxlength="63" pattern="[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+        value="${AuthorizePage.escape(slug)}" data-personal="${personal.slug}" data-team="${team.slug}">
+      <p class="subtext">Use the suggested name and address, edit them now, or leave them blank. You can change both later in the Portal.</p>
       <label for="su-password">Password (10+ characters)</label>
       <input id="su-password" name="password" type="password" autocomplete="new-password" minlength="10" maxlength="256" required>
       <label for="su-confirm-password">Confirm password</label>
@@ -239,12 +251,12 @@ export class AuthorizePage {
   <section class="intro" aria-labelledby="welcome">
     <div class="eyebrow">NUWA · IDENTITY &amp; CONNECTIONS</div>
     <h1 id="welcome">An address for <span class="accent">every Agent.</span></h1>
-    <p class="lead">Give your AI team an address that lasts. Create your Organization once, then connect Agents and Sessions across platforms.</p>
+    <p class="lead">Give your AI colleagues an address that lasts, whether you work alone or with a team. Connect Agents and Sessions across platforms.</p>
     <div class="architecture" aria-label="Identity hierarchy">
       <span>Organization</span><span class="arrow" aria-hidden="true">/</span>
       <span>Agent</span><span class="arrow" aria-hidden="true">/</span><span>Session</span>
     </div>
-    <p class="hero-note">Choose your Organization name and address handle when you register. Your team starts with the identity you want.</p>
+    <p class="hero-note">Choose personal or team use. We suggest a name and address so you can get started right away.</p>
   </section>
   <section class="forms" aria-label="Account authentication">
     <div class="panel">
