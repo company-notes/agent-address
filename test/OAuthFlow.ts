@@ -38,13 +38,15 @@ export class OAuthTestFlow {
 
   clientId = '';
 
+  constructor(private readonly redirectURI = OAuthTestFlow.REDIRECT_URI) {}
+
   async registerClient(): Promise<void> {
     const response = await OAuthTestFlow.fetch('/register', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         client_name: 'test client',
-        redirect_uris: [OAuthTestFlow.REDIRECT_URI],
+        redirect_uris: [this.redirectURI],
         grant_types: ['authorization_code', 'refresh_token'],
         response_types: ['code'],
         token_endpoint_auth_method: 'none',
@@ -53,14 +55,14 @@ export class OAuthTestFlow {
     this.clientId = ((await response.json()) as { client_id: string }).client_id;
   }
 
-  private async authorizeURL(): Promise<string> {
+  async authorizeURL(): Promise<string> {
     const challenge = OAuthTestFlow.base64URL(
       new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(this.verifier))),
     );
     const query = new URLSearchParams({
       response_type: 'code',
       client_id: this.clientId,
-      redirect_uri: OAuthTestFlow.REDIRECT_URI,
+      redirect_uri: this.redirectURI,
       code_challenge: challenge,
       code_challenge_method: 'S256',
       state: 'xyz',
@@ -92,7 +94,7 @@ export class OAuthTestFlow {
       body: new URLSearchParams({
         grant_type: 'authorization_code',
         code: location.searchParams.get('code') ?? '',
-        redirect_uri: OAuthTestFlow.REDIRECT_URI,
+        redirect_uri: this.redirectURI,
         client_id: this.clientId,
         code_verifier: this.verifier,
       }),
