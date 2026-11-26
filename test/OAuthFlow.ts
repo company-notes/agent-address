@@ -81,7 +81,7 @@ export class OAuthTestFlow {
     return OAuthTestFlow.fetch('/authorize', {
       method: 'POST',
       redirect: 'manual',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      headers: { 'content-type': 'application/x-www-form-urlencoded', origin: TestClient.ORIGIN },
       body: new URLSearchParams({ oauthRequest, ...fields }),
     });
   }
