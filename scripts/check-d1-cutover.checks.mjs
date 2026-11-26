@@ -69,3 +69,10 @@ test('the post-migration guard requires the scoped work Session trigger', () => 
   assert.throws(() => D1CutoverGuard.assertWorkMigration([]), /work Session revision scope/);
   assert.doesNotThrow(() => D1CutoverGuard.assertWorkMigration(['work_session_revision_scope']));
 });
+
+test('browser session migration is accepted alongside the current identity schema', () => {
+  assert.doesNotThrow(() => D1CutoverGuard.assertSafe([
+    ...D1CutoverGuard.CORE_TABLES, ...D1CutoverGuard.OFFICE_TABLES,
+    ...D1CutoverGuard.ADDRESS_TABLES, ...D1CutoverGuard.BROWSER_TABLES,
+  ], true, true));
+});

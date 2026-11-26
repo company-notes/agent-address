@@ -1,6 +1,7 @@
 import type { AuthRequest } from '@cloudflare/workers-oauth-provider';
 
 import { AccountRow } from './Accounts';
+import { BrowserSessions } from './BrowserSessions';
 import { AuthorizePage, FormValues } from './AuthorizePage';
 import { Env } from './Env';
 import { ApplicationError } from './ApplicationError';
@@ -17,10 +18,13 @@ export type AccountProps = {
 export class AuthorizeController {
   static readonly PATH = '/authorize';
 
+  private static readonly MANAGEMENT_CALLBACK = 'https://agent-relay.company-notes.com/manage/callback';
   private readonly services: Services;
+  private readonly browserSessions: BrowserSessions;
 
   constructor(private readonly env: Env) {
     this.services = new Services(env);
+    this.browserSessions = new BrowserSessions(env.DB);
   }
 
   private static field(form: FormData, name: string): string {
@@ -84,10 +88,29 @@ export class AuthorizeController {
   }
 
   async showForm(request: Request): Promise<Response> {
-    return new AuthorizePage(await this.parseAuthRequest(request)).render(this.formValues('signin', '', '', '', null));
+    const oauthRequest = await this.parseAuthRequest(request);
+    const query = new URL(request.url).searchParams;
+
+    if (query.get('redirect_uri') === AuthorizeController.MANAGEMENT_CALLBACK &&
+        query.get('prompt') !== 'login') {
+      const account = await this.browserSessions.account(request);
+
+      if (account) {
+        return this.complete(oauthRequest, account);
+      }
+    }
+
+    return new AuthorizePage(oauthRequest).render(this.formValues('signin', '', '', '', null));
   }
 
   async submitForm(request: Request): Promise<Response> {
+    const origin = request.headers.get('origin');
+    const sameOrigin = origin === new URL(request.url).origin;
+
+    if ((origin !== null && !sameOrigin) || request.headers.get('sec-fetch-site') === 'cross-site') {
+      throw new ApplicationError(403, 'cross_origin_login', 'Sign in using the Agent Address login page.');
+    }
+
     const form = await request.formData();
     const oauthRequest = AuthorizeController.parseOAuthRequest(AuthorizeController.field(form, 'oauthRequest'));
     const intent = AuthorizeController.parseIntent(AuthorizeController.field(form, 'intent'));
@@ -109,6 +132,16 @@ export class AuthorizeController {
       return new AuthorizePage(oauthRequest).render(this.formValues(intent, email, organizationSlug, organizationDisplayName, error.message, organizationType));
     }
 
+    const response = await this.complete(oauthRequest, account);
+
+    if (sameOrigin) {
+      response.headers.append('set-cookie', await this.browserSessions.issue(request, account));
+    }
+
+    return response;
+  }
+
+  private async complete(oauthRequest: AuthRequest, account: AccountRow): Promise<Response> {
     const props: AccountProps = { accountId: account.id, authVersion: account.authVersion };
     const { redirectTo } = await this.env.OAUTH_PROVIDER.completeAuthorization({
       request: oauthRequest,
@@ -118,7 +151,7 @@ export class AuthorizeController {
       props,
     });
 
-    return Response.redirect(redirectTo, 302);
+    return new Response(null, { status: 302, headers: { location: redirectTo, 'cache-control': 'no-store' } });
   }
 
   async handle(request: Request): Promise<Response> {

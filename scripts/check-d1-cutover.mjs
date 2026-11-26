@@ -36,6 +36,7 @@ export class D1CutoverGuard {
 
   static OFFICE_TABLES = ['agent_registration_requests'];
   static ADDRESS_TABLES = ['address_handle_aliases'];
+  static BROWSER_TABLES = ['browser_sessions'];
 
   static SQLITE_QUERY =
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name";
@@ -98,7 +99,7 @@ export class D1CutoverGuard {
       return;
     }
 
-    const expected = new Set([...this.CORE_TABLES, ...this.OFFICE_TABLES, ...this.ADDRESS_TABLES]);
+    const expected = new Set([...this.CORE_TABLES, ...this.OFFICE_TABLES, ...this.ADDRESS_TABLES, ...this.BROWSER_TABLES]);
     const missing = this.CORE_TABLES.filter((table) => !productTables.includes(table));
     const incompatible = productTables.filter((table) => !expected.has(table));
 
@@ -131,6 +132,10 @@ export class D1CutoverGuard {
       args.includes('--require-address-migration'));
 
     if (args.includes('--require-address-migration')) {
+      if (this.BROWSER_TABLES.some((table) => !tables.includes(table))) {
+        throw new Error('D1 schema cutover refused: browser session migration is not applied.');
+      }
+
       this.assertWorkMigration(this.readNames(mode, this.getPersistTo(args),
         "SELECT 'work_session_revision_scope' AS name FROM sqlite_master WHERE type = 'trigger' " +
         "AND name = 'sessions_identity_revision_insert' AND instr(sql, 'WHEN NEW.is_default = 1') > 0"));
