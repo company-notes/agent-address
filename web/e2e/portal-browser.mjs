@@ -140,6 +140,13 @@ try {
 
   await page.getByText(displayName, { exact: true }).waitFor({ timeout: 25000 });
 
+  // A separate application opens the Portal in a browser already authenticated by Agent Address.
+  const portalPage = await page.context().newPage();
+  await portalPage.goto(origin + '/portal/?sso=1');
+  await portalPage.getByText(displayName, { exact: true }).waitFor({ timeout: 15000 });
+  await portalPage.getByText(email, { exact: true }).waitFor();
+  await portalPage.close();
+
   await page.locator('#agentName').fill('xiaoming');
   await page.locator('#sessionName').fill('main');
   await page.getByRole('button', { name: 'Create Agent' }).click();
