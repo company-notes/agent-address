@@ -107,7 +107,8 @@ try {
   assert.equal(home.headers.get('location'), origin + '/portal/');
 
   browser = await chromium.launch({ headless: true, channel: 'chrome' });
-  const page = await browser.newPage();
+  const context = await browser.newContext();
+  const page = await context.newPage();
   const pageErrors = [];
   page.on('pageerror', (error) => { pageErrors.push(error.message); });
 
@@ -139,6 +140,13 @@ try {
   await page.getByRole('button', { name: 'Create account' }).click();
 
   await page.getByText(displayName, { exact: true }).waitFor({ timeout: 25000 });
+
+  // A separate application opens the Portal in a browser already authenticated by Agent Address.
+  const portalPage = await context.newPage();
+  await portalPage.goto(origin + '/portal/?sso=1');
+  await portalPage.getByText(displayName, { exact: true }).waitFor({ timeout: 15000 });
+  await portalPage.getByText(email, { exact: true }).waitFor();
+  await portalPage.close();
 
   await page.locator('#agentName').fill('xiaoming');
   await page.locator('#sessionName').fill('main');

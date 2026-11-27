@@ -69,6 +69,24 @@ describe('OAuth', () => {
     const studioAccount = await client.call('GET', '/v2/account/status', { token: studioTokens.accessToken });
     const relayAccount = await client.call('GET', '/v2/account/status', { token: relayTokens.accessToken });
     expect(relayAccount.body.data.organization.id).toBe(studioAccount.body.data.organization.id);
+
+    const portal = new OAuthTestFlow(TestClient.ORIGIN + '/portal/callback');
+    await portal.registerClient();
+    const portalURL = TestClient.ORIGIN + await portal.authorizeURL();
+    const portalRedirect = await exports.default.fetch(new Request(portalURL, {
+      headers: { cookie: cookie! }, redirect: 'manual',
+    }));
+    expect(portalRedirect.status, 'The trusted Portal must reuse the browser login').toBe(302);
+    const portalTokens = await portal.exchangeCode(portalRedirect);
+    const portalAccount = await client.call('GET', '/v2/account/status', { token: portalTokens.accessToken });
+    expect(portalAccount.body.data.account.email).toBe(email);
+    expect(portalAccount.body.data.organization.id).toBe(relayAccount.body.data.organization.id);
+
+    const portalForced = await exports.default.fetch(new Request(portalURL + '&prompt=login', {
+      headers: { cookie: cookie! }, redirect: 'manual',
+    }));
+    expect(portalForced.status, 'Explicit Portal sign-in must still allow account switching').toBe(200);
+
     const thirdParty = await exports.default.fetch(new Request(TestClient.ORIGIN + await studio.authorizeURL(), {
       headers: { cookie: cookie! }, redirect: 'manual',
     }));

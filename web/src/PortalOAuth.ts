@@ -31,7 +31,7 @@ export class PortalOAuth {
     this.completePromise = null;
   }
 
-  static async signIn(): Promise<void> {
+  static async signIn(reuseBrowserSession = false): Promise<void> {
     const verifier = this.base64URL(crypto.getRandomValues(new Uint8Array(32)));
     const state = this.base64URL(crypto.getRandomValues(new Uint8Array(16)));
     const redirectURI = this.redirectURI();
@@ -70,6 +70,10 @@ export class PortalOAuth {
       state,
     });
 
+    if (!reuseBrowserSession) {
+      query.set('prompt', 'login');
+    }
+
     window.location.assign('/authorize?' + query);
   }
 
@@ -83,6 +87,14 @@ export class PortalOAuth {
 
   private static async exchangeCallback(): Promise<string | null> {
     if (window.location.pathname !== '/portal/callback') {
+      const query = new URLSearchParams(window.location.search);
+      if (query.get('sso') === '1') {
+        sessionStorage.removeItem(this.TOKEN_KEY);
+        window.history.replaceState({}, '', '/portal/');
+        await this.signIn(true);
+        return null;
+      }
+
       return this.getToken();
     }
 

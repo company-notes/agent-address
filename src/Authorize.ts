@@ -91,7 +91,10 @@ export class AuthorizeController {
     const oauthRequest = await this.parseAuthRequest(request);
     const query = new URL(request.url).searchParams;
 
-    if (query.get('redirect_uri') === AuthorizeController.MANAGEMENT_CALLBACK &&
+    const redirectURI = query.get('redirect_uri');
+    const portalCallback = new URL('/portal/callback', request.url).href;
+
+    if ((redirectURI === AuthorizeController.MANAGEMENT_CALLBACK || redirectURI === portalCallback) &&
         query.get('prompt') !== 'login') {
       const account = await this.browserSessions.account(request);
 
