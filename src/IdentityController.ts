@@ -219,7 +219,7 @@ export class IdentityController {
 
     if (resource === 'sessions' && identifier && action === 'runtime-lease' &&
         segments.length === 5 && ['PUT', 'PATCH', 'DELETE'].includes(method)) {
-      return this.sessionRuntime(services, accountID, identifier, request);
+      return this.sessionRuntime(services, accountID, identifier, request, relayResource);
     }
 
     if (method === 'GET' && resource === 'addresses' && segments.length === 3) {
@@ -239,6 +239,7 @@ export class IdentityController {
     accountID: string,
     sessionID: string,
     request: Request,
+    relayResource?: RelayResource,
   ): Promise<Response> {
     const data = await RequestData.readJSON(request);
 
@@ -258,7 +259,8 @@ export class IdentityController {
       const lease = await services.identities.renewWithIdentity(accountID, sessionID, runtimeToken);
 
       return ResponseData.ok(new URL(request.url).searchParams.get('include_identity') === '1'
-        ? lease : { expiresAt: lease.expiresAt });
+        ? { ...lease, ...(relayResource ? { relayResource } : {}) }
+        : { expiresAt: lease.expiresAt });
     }
 
     if (request.method === 'DELETE') {

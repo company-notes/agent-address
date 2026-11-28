@@ -50,6 +50,13 @@ describe('OAuth', () => {
     });
     expect(claimed.status).toBe(200);
     expect(claimed.body.data.session.id).toBe(target.id);
+
+    const lease = await client.call('PATCH', '/v2/account/sessions/' + target.id + '/runtime-lease?include_identity=1', {
+      token: scoped.accessToken, body: { runtimeToken: claimed.body.data.runtimeToken },
+    });
+    expect(lease.status).toBe(200);
+    expect(lease.body.data.relayResource).toEqual({ resource, sessionID: target.id });
+
     const forbidden = await client.call('POST', '/v2/account/agents', {
       token: scoped.accessToken, body: { agentName: 'unexpected' },
     });
