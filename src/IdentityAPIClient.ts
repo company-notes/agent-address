@@ -26,6 +26,7 @@ export class IdentityAPIClient {
       this.identity.accountId,
       request,
       this.identity.authVersion,
+      undefined, this.identity.relayResource,
     );
     const result = await response.json() as APIResult<T>;
 

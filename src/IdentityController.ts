@@ -5,6 +5,7 @@ import { ApplicationError } from './ApplicationError';
 import { JSONRecord, RequestData, ResponseData } from './HTTP';
 import { NewAgentInput, NewSessionInput, RuntimeClaim } from './IdentityService';
 import { Services } from './Services';
+import { RelayResourceGrant, type RelayResource } from './RelayResourceGrant';
 
 // The only account-facing HTTP API. MCP calls handleAuthenticated with its OAuth identity.
 export class IdentityController {
@@ -25,13 +26,15 @@ export class IdentityController {
     }
 
     return this.handleAuthenticated(identity.accountId, request, identity.authVersion,
-      identity.grantFingerprint);
+      identity.grantFingerprint, identity.relayResource);
   }
 
   async handleAuthenticated(
     accountID: string, request: Request, authVersion = 0, grantFingerprint?: string,
+    relayResource?: RelayResource,
   ): Promise<Response> {
     const { account, organization } = await this.accounts.authenticatedAccount(accountID, authVersion);
+    RelayResourceGrant.assertAccountRequest(relayResource, request);
     const services = new Services(this.env, { accountID, organization });
 
     const url = new URL(request.url);
@@ -51,6 +54,7 @@ export class IdentityController {
       return ResponseData.ok({
         account: { email: account.email },
         organization,
+        ...(relayResource ? { relayResource } : {}),
         ...(url.searchParams.get('include_grant') === '1' && grantFingerprint
           ? { grantFingerprint } : {}),
       });
@@ -215,7 +219,7 @@ export class IdentityController {
 
     if (resource === 'sessions' && identifier && action === 'runtime-lease' &&
         segments.length === 5 && ['PUT', 'PATCH', 'DELETE'].includes(method)) {
-      return this.sessionRuntime(services, accountID, identifier, request);
+      return this.sessionRuntime(services, accountID, identifier, request, relayResource);
     }
 
     if (method === 'GET' && resource === 'addresses' && segments.length === 3) {
@@ -235,6 +239,7 @@ export class IdentityController {
     accountID: string,
     sessionID: string,
     request: Request,
+    relayResource?: RelayResource,
   ): Promise<Response> {
     const data = await RequestData.readJSON(request);
 
@@ -254,7 +259,8 @@ export class IdentityController {
       const lease = await services.identities.renewWithIdentity(accountID, sessionID, runtimeToken);
 
       return ResponseData.ok(new URL(request.url).searchParams.get('include_identity') === '1'
-        ? lease : { expiresAt: lease.expiresAt });
+        ? { ...lease, ...(relayResource ? { relayResource } : {}) }
+        : { expiresAt: lease.expiresAt });
     }
 
     if (request.method === 'DELETE') {

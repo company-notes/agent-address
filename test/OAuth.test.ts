@@ -7,6 +7,74 @@ import { OAuthTestFlow } from './OAuthFlow';
 describe('OAuth', () => {
   const password = OAuthTestFlow.PASSWORD;
 
+  it('authorizes an existing Agent-specific Relay resource without revoking the office grant', async () => {
+    const flow = new OAuthTestFlow();
+    const email = TestClient.uniqueName('resource') + '@example.com';
+    const slug = TestClient.uniqueName('office');
+    const office = await flow.authorizeAccount('signup', email, password, slug);
+    const client = new TestClient();
+    const ava = await client.call('POST', '/v2/account/agents', {
+      token: office.accessToken, body: { agentName: 'ava', sessionName: 'main' },
+    });
+    const gateway = await client.call('POST', '/v2/account/agents', {
+      token: office.accessToken, body: { agentName: 'gateway', sessionName: 'main' },
+    });
+    expect(ava.status).toBe(201);
+    expect(gateway.status).toBe(201);
+
+    const target = ava.body.data.session;
+    const other = gateway.body.data.session;
+    const resource = 'https://mcp.agent-relay.company-notes.com/mcp/' + target.canonical;
+
+    // Reuse the exact native OAuth client, not merely the same human Account.
+    const page = await exports.default.fetch(new Request(
+      TestClient.ORIGIN + await flow.authorizeURL() + '&resource=' + encodeURIComponent(resource),
+    ));
+    const html = await page.text();
+    expect(html).toContain(target.canonical);
+    const request = html.match(/name="oauthRequest" value="([^"]*)"/)![1]
+      .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+    const scoped = await flow.exchangeCode(await flow.submitLogin({ intent: 'signin', email, password }, request));
+    const status = async (token: string) => client.call('GET', '/v2/account/status?include_grant=1', { token });
+    const independent = await status(scoped.accessToken);
+    expect(independent.status).toBe(200);
+    expect(independent.body.data.relayResource).toEqual({ resource, sessionID: target.id });
+
+    expect((await status(office.accessToken)).status).toBe(200);
+    expect((await status(office.accessToken)).body.data.relayResource).toBeUndefined();
+
+    const denied = await client.call('PUT', '/v2/account/sessions/' + other.id + '/owner-runtime-lease', {
+      token: scoped.accessToken, body: { runtimeLabel: 'incorrect target' },
+    });
+    expect(denied.status).toBe(403);
+
+    const claimed = await client.call('PUT', '/v2/account/sessions/' + target.id + '/owner-runtime-lease', {
+      token: scoped.accessToken, body: { runtimeLabel: 'independent MCP' },
+    });
+    expect(claimed.status).toBe(200);
+    expect(claimed.body.data.session.id).toBe(target.id);
+
+    const lease = await client.call('PATCH', '/v2/account/sessions/' + target.id + '/runtime-lease?include_identity=1', {
+      token: scoped.accessToken, body: { runtimeToken: claimed.body.data.runtimeToken },
+    });
+    expect(lease.status).toBe(200);
+    expect(lease.body.data.relayResource).toEqual({ resource, sessionID: target.id });
+
+    const forbidden = await client.call('POST', '/v2/account/agents', {
+      token: scoped.accessToken, body: { agentName: 'unexpected' },
+    });
+    expect(forbidden.status).toBe(403);
+
+    const renewed = await flow.refresh(scoped.refreshToken!);
+    expect((await status(renewed.accessToken)).body.data.relayResource).toEqual({ resource, sessionID: target.id });
+    expect((await status(office.accessToken)).status).toBe(200);
+
+    const rootPage = await flow.openLoginPage();
+    const root = await flow.exchangeCode(await flow.submitLogin({ intent: 'signin', email, password }, rootPage.oauthRequest));
+    expect((await status(root.accessToken)).status).toBe(200);
+    expect((await status(renewed.accessToken)).status).toBe(200);
+  });
+
   it('advertises authorization server metadata', async () => {
     const response = await exports.default.fetch(
       new Request(`${TestClient.ORIGIN}/.well-known/oauth-authorization-server`),

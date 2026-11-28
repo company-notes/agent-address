@@ -2,6 +2,7 @@ import { AccountProps } from './Authorize';
 import { Env } from './Env';
 import { ApplicationError } from './ApplicationError';
 import { RequestData } from './HTTP';
+import { RelayResourceGrant } from './RelayResourceGrant';
 
 export type OAuthGrantIdentity = AccountProps & { grantFingerprint: string };
 
@@ -21,6 +22,8 @@ export class AccountAuthenticator {
         !result.grantId) {
       throw new ApplicationError(401, 'invalid_token', 'OAuth access token is invalid or revoked.');
     }
+
+    RelayResourceGrant.assertAudience(props.relayResource, result.audience);
 
     // Grant ID is authoritative provider state, unlike a rotating access token
     // or an Account email. Expose only a purpose-scoped irreversible fingerprint.

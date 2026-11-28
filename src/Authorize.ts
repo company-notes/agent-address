@@ -8,10 +8,12 @@ import { ApplicationError } from './ApplicationError';
 import { Services } from './Services';
 import { RegistrationCredentials } from './RegistrationCredentials';
 import { RegistrationNames, type RegistrationType } from './RegistrationNames';
+import { RelayResourceGrant, type RelayResource } from './RelayResourceGrant';
 
 export type AccountProps = {
   accountId: string;
   authVersion?: number;
+  relayResource?: RelayResource;
 };
 
 // Serves the OAuth authorization page where an account signs in or signs up, then completes the grant.
@@ -89,6 +91,7 @@ export class AuthorizeController {
 
   async showForm(request: Request): Promise<Response> {
     const oauthRequest = await this.parseAuthRequest(request);
+    RelayResourceGrant.address(oauthRequest.resource);
     const query = new URL(request.url).searchParams;
 
     const redirectURI = query.get('redirect_uri');
@@ -145,14 +148,23 @@ export class AuthorizeController {
   }
 
   private async complete(oauthRequest: AuthRequest, account: AccountRow): Promise<Response> {
-    const props: AccountProps = { accountId: account.id, authVersion: account.authVersion };
+    const relayResource = await RelayResourceGrant.authorize(oauthRequest, account.id, this.services.identities);
+    const props: AccountProps = { accountId: account.id, authVersion: account.authVersion,
+      ...(relayResource ? { relayResource } : {}) };
+    const previous = await RelayResourceGrant.previous(this.env, account.id, oauthRequest, relayResource);
+
     const { redirectTo } = await this.env.OAUTH_PROVIDER.completeAuthorization({
       request: oauthRequest,
       userId: account.id,
-      metadata: { email: account.email },
+      metadata: { email: account.email, ...(relayResource ? { relayResourceSessionID: relayResource.sessionID } : {}) },
       scope: oauthRequest.scope,
       props,
+      revokeExistingGrants: false,
     });
+
+    for (const grantID of previous) {
+      await this.env.OAUTH_PROVIDER.revokeGrant(grantID, account.id);
+    }
 
     return new Response(null, { status: 302, headers: { location: redirectTo, 'cache-control': 'no-store' } });
   }
