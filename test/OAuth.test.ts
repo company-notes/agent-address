@@ -21,6 +21,7 @@ describe('OAuth', () => {
     });
     expect(ava.status).toBe(201);
     expect(gateway.status).toBe(201);
+
     const target = ava.body.data.session;
     const other = gateway.body.data.session;
     const resource = 'https://mcp.agent-relay.company-notes.com/mcp/' + target.canonical;
@@ -38,6 +39,7 @@ describe('OAuth', () => {
     const independent = await status(scoped.accessToken);
     expect(independent.status).toBe(200);
     expect(independent.body.data.relayResource).toEqual({ resource, sessionID: target.id });
+
     expect((await status(office.accessToken)).status).toBe(200);
     expect((await status(office.accessToken)).body.data.relayResource).toBeUndefined();
 
@@ -45,6 +47,7 @@ describe('OAuth', () => {
       token: scoped.accessToken, body: { runtimeLabel: 'incorrect target' },
     });
     expect(denied.status).toBe(403);
+
     const claimed = await client.call('PUT', '/v2/account/sessions/' + target.id + '/owner-runtime-lease', {
       token: scoped.accessToken, body: { runtimeLabel: 'independent MCP' },
     });

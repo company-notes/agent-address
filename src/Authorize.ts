@@ -152,6 +152,7 @@ export class AuthorizeController {
     const props: AccountProps = { accountId: account.id, authVersion: account.authVersion,
       ...(relayResource ? { relayResource } : {}) };
     const previous = await RelayResourceGrant.previous(this.env, account.id, oauthRequest, relayResource);
+
     const { redirectTo } = await this.env.OAUTH_PROVIDER.completeAuthorization({
       request: oauthRequest,
       userId: account.id,
