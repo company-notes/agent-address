@@ -1,4 +1,5 @@
 import type { AuthRequest } from '@cloudflare/workers-oauth-provider';
+import { RelayResourceGrant } from './RelayResourceGrant';
 import { RegistrationNames, type RegistrationType } from './RegistrationNames';
 
 export type FormValues = {
@@ -235,6 +236,7 @@ export class AuthorizePage {
   }
 
   render(values: FormValues): Response {
+    const target = RelayResourceGrant.address(this.oauthRequest.resource);
     const error = values.error ? `<p class="error" role="alert">${AuthorizePage.escape(values.error)}</p>` : '';
     const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -261,6 +263,7 @@ export class AuthorizePage {
   <section class="forms" aria-label="Account authentication">
     <div class="panel">
       <div class="panel-header"><h2>Welcome to Nuwa</h2><p>Sign in to continue, or create an account and its Organization together.</p></div>
+      ${target ? '<p>Authorize Relay only for <strong>' + AuthorizePage.escape(target) + '</strong>.</p>' : ''}
       ${error}${this.signInForm(values)}
       <details class="signup-disclosure" ${values.intent === 'signup' ? 'open' : ''}>
         <summary>Create a new account &amp; Organization</summary>
